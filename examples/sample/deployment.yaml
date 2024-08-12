@@ -1,0 +1,23 @@
+apiVersion: resource.akash.web7.md/v1alpha1
+kind: Deployment
+metadata:
+  name: my-akash-deployment
+spec:
+  providerConfigRef:
+    name: example
+  forProvider:
+    deployment: |
+              ---
+              version: "2.0"
+
+              services:
+                mysql:
+                  image: mysql 
+                  expose:
+                    - port: 3306 
+                      to:
+                        - global: true
+                    - port: 8080
+                      as: 80
+                      to:
+                        - global: true
