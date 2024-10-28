@@ -1,6 +1,6 @@
-# provider-template
+# provider-akash
 
-`provider-template` is a minimal [Crossplane](https://crossplane.io/) Provider
+`provider-akash` is a minimal [Crossplane](https://crossplane.io/) Provider
 that is meant to be used as a template for implementing new Providers. It comes
 with the following features that are meant to be refactored:
 
