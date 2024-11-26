@@ -1,4 +1,4 @@
-apiVersion: template.crossplane.io/v1alpha1
+apiVersion: akash.web7.md/v1alpha1
 kind: StoreConfig
 metadata:
   name: vault
