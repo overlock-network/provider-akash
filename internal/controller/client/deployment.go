@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/web-seven/provider-akash/internal/controller/client/cli"
-	"github.com/web-seven/provider-akash/internal/controller/client/types"
+	"github.com/overlock-network/provider-akash/internal/controller/client/cli"
+	"github.com/overlock-network/provider-akash/internal/controller/client/types"
 )
 
 type Seqs struct {

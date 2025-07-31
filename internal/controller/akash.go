@@ -20,8 +20,8 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/controller"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	"github.com/web-seven/provider-akash/internal/controller/config"
-	"github.com/web-seven/provider-akash/internal/controller/deployment"
+	"github.com/overlock-network/provider-akash/internal/controller/config"
+	"github.com/overlock-network/provider-akash/internal/controller/deployment"
 )
 
 // Setup creates all Akash controllers with the supplied logger and adds them to

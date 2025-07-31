@@ -20,8 +20,8 @@ package apis
 import (
 	"k8s.io/apimachinery/pkg/runtime"
 
-	resourcev1alpha1 "github.com/web-seven/provider-akash/apis/resource/v1alpha1"
-	akashv1alpha1 "github.com/web-seven/provider-akash/apis/v1alpha1"
+	resourcev1alpha1 "github.com/overlock-network/provider-akash/apis/resource/v1alpha1"
+	akashv1alpha1 "github.com/overlock-network/provider-akash/apis/v1alpha1"
 )
 
 func init() {

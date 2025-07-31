@@ -3,7 +3,7 @@ package client
 import (
 	"fmt"
 
-	"github.com/web-seven/provider-akash/internal/controller/client/cli"
+	"github.com/overlock-network/provider-akash/internal/controller/client/cli"
 )
 
 func (ak *AkashClient) SendManifest(dseq string, provider string, manifestLocation string) (string, error) {

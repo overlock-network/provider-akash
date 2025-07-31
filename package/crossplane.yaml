@@ -4,7 +4,7 @@ metadata:
   name: provider-akash
   annotations:
     meta.crossplane.io/maintainer: Crossplane Maintainers <info@crossplane.io>
-    meta.crossplane.io/source: github.com/web-seven/provider-akash
+    meta.crossplane.io/source: github.com/overlock-network/provider-akash
     meta.crossplane.io/license: Apache-2.0
     meta.crossplane.io/description: |
       A akash that can be used to create Crossplane providers.

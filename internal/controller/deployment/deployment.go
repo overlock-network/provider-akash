@@ -32,10 +32,10 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 
-	"github.com/web-seven/provider-akash/apis/resource/v1alpha1"
-	apisv1alpha1 "github.com/web-seven/provider-akash/apis/v1alpha1"
-	deployment "github.com/web-seven/provider-akash/internal/controller/client"
-	"github.com/web-seven/provider-akash/internal/features"
+	"github.com/overlock-network/provider-akash/apis/resource/v1alpha1"
+	apisv1alpha1 "github.com/overlock-network/provider-akash/apis/v1alpha1"
+	deployment "github.com/overlock-network/provider-akash/internal/controller/client"
+	"github.com/overlock-network/provider-akash/internal/features"
 )
 
 const (
