@@ -175,7 +175,10 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	}
 
 	fmt.Printf("Creating: %+v", cr)
-	c.service.client.CreateDeployment("test")
+	_, err := c.service.client.CreateDeployment("test")
+	if err != nil {
+		return managed.ExternalCreation{}, err
+	}
 	return managed.ExternalCreation{
 		// Optionally return any details that may be required to connect to the
 		// external resource. These will be stored as the connection secret.

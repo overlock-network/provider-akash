@@ -10,7 +10,7 @@ import (
 
 func (ak *AkashClient) GetBids(seqs Seqs, timeout time.Duration) (types.Bids, error) {
 	bids := types.Bids{}
-	for timeout > 0 && len(bids) <= 0 {
+	for timeout > 0 && len(bids) == 0 {
 		startTime := time.Now()
 		currentBids, err := queryBidList(ak, seqs)
 		if err != nil {

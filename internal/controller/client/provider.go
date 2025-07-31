@@ -18,7 +18,7 @@ func (ak *AkashClient) SendManifest(dseq string, provider string, manifestLocati
 		return "", err
 	}
 
-	fmt.Sprintf("Response content: %s", out)
+	fmt.Printf("Response content: %s\n", out)
 
 	return string(out), nil
 }
