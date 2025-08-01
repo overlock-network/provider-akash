@@ -1,4 +1,4 @@
-module github.com/web-seven/provider-akash
+module github.com/overlock-network/provider-akash
 
 go 1.21
 

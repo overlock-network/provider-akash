@@ -37,10 +37,10 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/ratelimiter"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 
-	"github.com/web-seven/provider-akash/apis"
-	"github.com/web-seven/provider-akash/apis/v1alpha1"
-	akash "github.com/web-seven/provider-akash/internal/controller"
-	"github.com/web-seven/provider-akash/internal/features"
+	"github.com/overlock-network/provider-akash/apis"
+	"github.com/overlock-network/provider-akash/apis/v1alpha1"
+	akash "github.com/overlock-network/provider-akash/internal/controller"
+	"github.com/overlock-network/provider-akash/internal/features"
 )
 
 func main() {

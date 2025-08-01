@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/web-seven/provider-akash/internal/controller/client/cli"
-	"github.com/web-seven/provider-akash/internal/controller/client/types"
+	"github.com/overlock-network/provider-akash/internal/controller/client/cli"
+	"github.com/overlock-network/provider-akash/internal/controller/client/types"
 )
 
 func (ak *AkashClient) GetBids(seqs Seqs, timeout time.Duration) (types.Bids, error) {
 	bids := types.Bids{}
-	for timeout > 0 && len(bids) <= 0 {
+	for timeout > 0 && len(bids) == 0 {
 		startTime := time.Now()
 		currentBids, err := queryBidList(ak, seqs)
 		if err != nil {

@@ -1,12 +1,13 @@
 package providers_api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 
-	"github.com/web-seven/provider-akash/internal/controller/client/types"
+	"github.com/overlock-network/provider-akash/internal/controller/client/types"
 )
 
 type provider struct {
@@ -35,7 +36,7 @@ func New(host string) *ProvidersClient {
 // GetAllProviders gets all the providers from the providers' API. Returns error in case something goes wrong.
 func (c *ProvidersClient) GetAllProviders() ([]types.Provider, error) {
 	addr := c.host + "/provider" + string(os.PathSeparator)
-	req, err := http.NewRequest(http.MethodGet, addr, nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, addr, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -44,6 +45,11 @@ func (c *ProvidersClient) GetAllProviders() ([]types.Provider, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			fmt.Printf("error closing response body: %v\n", cerr)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("response status code %d", resp.StatusCode)

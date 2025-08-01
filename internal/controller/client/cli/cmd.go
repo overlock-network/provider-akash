@@ -9,11 +9,26 @@ import (
 	"strings"
 )
 
-func (c AkashCommand) AsCmd() *exec.Cmd {
-	return exec.Command(
-		c.Content[0],
-		c.Headless()...,
-	)
+func (c AkashCommand) AsCmd() (*exec.Cmd, error) {
+	if len(c.Content) == 0 {
+		return nil, errors.New("empty command")
+	}
+
+	path, err := exec.LookPath(c.Content[0])
+	if err != nil {
+		return nil, err
+	}
+
+	switch c.Content[0] {
+	case "akash":
+		// #nosec
+		return exec.Command(path, c.Headless()...), nil
+	case "provider-services":
+		// #nosec
+		return exec.Command(path, c.Headless()...), nil
+	default:
+		return nil, fmt.Errorf("invalid command: %s", c.Content[0])
+	}
 }
 
 type AkashErrorResponse struct {
@@ -21,7 +36,10 @@ type AkashErrorResponse struct {
 }
 
 func (c AkashCommand) Raw() ([]byte, error) {
-	cmd := c.AsCmd()
+	cmd, err := c.AsCmd()
+	if err != nil {
+		return nil, err
+	}
 
 	strings.Join(cmd.Args, " ")
 
@@ -53,7 +71,10 @@ func (c AkashCommand) Raw() ([]byte, error) {
 }
 
 func (c AkashCommand) DecodeJson(v any) error {
-	cmd := c.AsCmd()
+	cmd, err := c.AsCmd()
+	if err != nil {
+		return err
+	}
 
 	strings.Join(cmd.Args, " ")
 

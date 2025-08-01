@@ -1,7 +1,7 @@
 package client
 
 import (
-	"github.com/web-seven/provider-akash/internal/controller/client/cli"
+	"github.com/overlock-network/provider-akash/internal/controller/client/cli"
 )
 
 func (ak *AkashClient) CreateLease(seqs Seqs, provider string) (string, error) {

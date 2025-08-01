@@ -1,11 +1,10 @@
 package client
 
 import (
-	"errors"
 	"fmt"
 
-	"github.com/web-seven/provider-akash/internal/controller/client/cli"
-	"github.com/web-seven/provider-akash/internal/controller/client/types"
+	"github.com/overlock-network/provider-akash/internal/controller/client/cli"
+	"github.com/overlock-network/provider-akash/internal/controller/client/types"
 )
 
 type Seqs struct {
@@ -45,7 +44,7 @@ func (ak *AkashClient) CreateDeployment(manifestLocation string) (Seqs, error) {
 	gseq, _ := attributes.Get("gseq")
 	oseq, _ := attributes.Get("oseq")
 
-	fmt.Sprintf("Deployment created with DSEQ=%s GSEQ=%s OSEQ=%s", dseq, gseq, oseq)
+	fmt.Printf("Deployment created with DSEQ=%s GSEQ=%s OSEQ=%s\n", dseq, gseq, oseq)
 
 	return Seqs{dseq, gseq, oseq}, nil
 }
@@ -62,7 +61,7 @@ func transactionCreateDeployment(ak *AkashClient, manifestLocation string) (type
 	}
 
 	if len(transaction.Logs) == 0 {
-		return nil, errors.New(fmt.Sprintf("something went wrong: %s", transaction.RawLog))
+		return nil, fmt.Errorf("something went wrong: %s", transaction.RawLog)
 	}
 
 	return transaction.Logs[0].Events[0].Attributes, nil
@@ -79,7 +78,7 @@ func (ak *AkashClient) DeleteDeployment(dseq string, owner string) error {
 		return err
 	}
 
-	fmt.Sprintf("Response: %s", out)
+	fmt.Printf("Response: %s\n", out)
 
 	return nil
 }
@@ -95,7 +94,7 @@ func (ak *AkashClient) UpdateDeployment(dseq string, manifestLocation string) er
 		return err
 	}
 
-	fmt.Sprintf("Response: %s", out)
+	fmt.Printf("Response: %s\n", out)
 
 	return nil
 }
