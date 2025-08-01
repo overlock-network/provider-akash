@@ -24,10 +24,11 @@ img.publish:
 img.build.shared:
 	@cp Dockerfile $(IMAGE_TEMP_DIR) || $(FAIL)
 	@cp -r $(OUTPUT_DIR)/bin/ $(IMAGE_TEMP_DIR)/bin || $(FAIL)
-	@docker buildx build $(BUILD_ARGS) \
-		--platform $(IMAGE_PLATFORMS) \
-		-t $(IMAGE) \
-		$(IMAGE_TEMP_DIR) || $(FAIL)
+	@if [ "$(IMAGE_PLATFORMS)" = "linux/amd64" ]; then \
+		docker build $(BUILD_ARGS) -t $(IMAGE) $(IMAGE_TEMP_DIR) || $(FAIL); \
+	else \
+		docker buildx build $(BUILD_ARGS) --platform $(IMAGE_PLATFORMS) -t $(IMAGE) $(IMAGE_TEMP_DIR) || $(FAIL); \
+	fi
 
 img.promote:
 	@$(INFO) Skipping image promotion from $(FROM_IMAGE) to $(TO_IMAGE)
