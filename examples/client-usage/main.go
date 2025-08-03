@@ -11,7 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
-	akashclient "github.com/overlock-network/provider-akash/internal/controller/client"
+	akashclient "github.com/overlock-network/provider-akash/internal/client"
 )
 
 func main() {
