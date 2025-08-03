@@ -1,0 +1,100 @@
+package client
+
+import (
+	"fmt"
+
+	"github.com/overlock-network/provider-akash/internal/client/cli"
+	"github.com/overlock-network/provider-akash/internal/client/types"
+)
+
+type Seqs struct {
+	Dseq string
+	Gseq string
+	Oseq string
+}
+
+func (ak *AkashClient) GetDeployments(owner string) ([]types.DeploymentId, error) {
+	panic("Not implemented")
+}
+
+func (ak *AkashClient) GetDeployment(dseq string, owner string) (types.Deployment, error) {
+	cmd := cli.AkashCli(ak).Query().Deployment().Get().SetOwner(owner).SetDseq(dseq).SetChainId(ak.Config.ChainId).
+		SetNode(ak.Config.Node).OutputJson()
+
+	deployment := types.Deployment{}
+	err := cmd.DecodeJson(&deployment)
+	if err != nil {
+		return types.Deployment{}, err
+	}
+
+	return deployment, nil
+}
+
+func (ak *AkashClient) CreateDeployment(manifestLocation string) (Seqs, error) {
+
+	fmt.Println("Creating deployment")
+	// Create deployment using the file created with the SDL
+	attributes, err := transactionCreateDeployment(ak, manifestLocation)
+	if err != nil {
+		fmt.Print(ak.ctx, "Failed creating deployment")
+		return Seqs{}, err
+	}
+
+	dseq, _ := attributes.Get("dseq")
+	gseq, _ := attributes.Get("gseq")
+	oseq, _ := attributes.Get("oseq")
+
+	fmt.Printf("Deployment created with DSEQ=%s GSEQ=%s OSEQ=%s\n", dseq, gseq, oseq)
+
+	return Seqs{dseq, gseq, oseq}, nil
+}
+
+// Perform the transaction to create the deployment and return either the DSEQ or an error.
+func transactionCreateDeployment(ak *AkashClient, manifestLocation string) (types.TransactionEventAttributes, error) {
+	cmd := cli.AkashCli(ak).Tx().Deployment().Create().Manifest(manifestLocation).
+		DefaultGas().AutoAccept().SetFrom(ak.Config.KeyName).SetKeyringBackend(ak.Config.KeyringBackend).
+		SetNote(ak.transactionNote).SetChainId(ak.Config.ChainId).SetNode(ak.Config.Node).OutputJson()
+
+	transaction := types.Transaction{}
+	if err := cmd.DecodeJson(&transaction); err != nil {
+		return nil, err
+	}
+
+	if len(transaction.Logs) == 0 {
+		return nil, fmt.Errorf("something went wrong: %s", transaction.RawLog)
+	}
+
+	return transaction.Logs[0].Events[0].Attributes, nil
+}
+
+func (ak *AkashClient) DeleteDeployment(dseq string, owner string) error {
+	cmd := cli.AkashCli(ak).Tx().Deployment().Close().
+		SetDseq(dseq).SetOwner(owner).SetFrom(ak.Config.KeyName).
+		DefaultGas().SetChainId(ak.Config.ChainId).SetKeyringBackend(ak.Config.KeyringBackend).
+		SetNote(ak.transactionNote).SetNode(ak.Config.Node).AutoAccept().OutputJson()
+
+	out, err := cmd.Raw()
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Response: %s\n", out)
+
+	return nil
+}
+
+func (ak *AkashClient) UpdateDeployment(dseq string, manifestLocation string) error {
+	cmd := cli.AkashCli(ak).Tx().Deployment().Update().Manifest(manifestLocation).
+		SetDseq(dseq).SetFrom(ak.Config.KeyName).SetNode(ak.Config.Node).
+		SetNote(ak.transactionNote).SetKeyringBackend(ak.Config.KeyringBackend).SetChainId(ak.Config.ChainId).
+		GasAuto().SetGasAdjustment(1.5).SetGasPrices().SetSignMode("amino-json").AutoAccept().OutputJson()
+
+	out, err := cmd.Raw()
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Response: %s\n", out)
+
+	return nil
+}

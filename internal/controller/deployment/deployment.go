@@ -25,6 +25,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/crossplane/crossplane-runtime/pkg/connection"
 	"github.com/crossplane/crossplane-runtime/pkg/controller"
 	"github.com/crossplane/crossplane-runtime/pkg/event"
@@ -34,7 +35,7 @@ import (
 
 	"github.com/overlock-network/provider-akash/apis/resource/v1alpha1"
 	apisv1alpha1 "github.com/overlock-network/provider-akash/apis/v1alpha1"
-	deployment "github.com/overlock-network/provider-akash/internal/controller/client"
+	deployment "github.com/overlock-network/provider-akash/internal/client"
 	"github.com/overlock-network/provider-akash/internal/features"
 )
 
@@ -59,6 +60,24 @@ var (
 		}
 		return client, nil
 	}
+
+	// newDeploymentServiceFromProviderConfig creates DeploymentService from ProviderConfig (legacy)
+	newDeploymentServiceFromProviderConfig = func(ctx context.Context, kubeClient client.Client, credSource xpv1.CredentialsSource, credSelectors xpv1.CommonCredentialSelectors, config deployment.AkashProviderConfiguration) (*DeploymentService, error) {
+		c, err := deployment.NewFromProviderConfig(ctx, kubeClient, credSource, credSelectors, config)
+		if err != nil {
+			return nil, err
+		}
+		return &DeploymentService{client: c}, nil
+	}
+
+	// newDeploymentServiceFromManagedResource creates DeploymentService with auto-loading credentials and configuration
+	newDeploymentServiceFromManagedResource = func(ctx context.Context, kubeClient client.Client, usage resource.Tracker, mg resource.Managed, pcInfo deployment.ProviderConfigInfo) (*DeploymentService, error) {
+		c, err := deployment.NewFromManagedResource(ctx, kubeClient, usage, mg, pcInfo)
+		if err != nil {
+			return nil, err
+		}
+		return &DeploymentService{client: c}, nil
+	}
 )
 
 // Setup adds a controller that reconciles Deployment managed resources.
@@ -73,9 +92,11 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 	r := managed.NewReconciler(mgr,
 		resource.ManagedKind(v1alpha1.DeploymentGroupVersionKind),
 		managed.WithExternalConnecter(&connector{
-			kube:                      mgr.GetClient(),
-			usage:                     resource.NewProviderConfigUsageTracker(mgr.GetClient(), &apisv1alpha1.ProviderConfigUsage{}),
-			createDeploymentServiceFn: newDeploymentService}),
+			kube:                               mgr.GetClient(),
+			usage:                              resource.NewProviderConfigUsageTracker(mgr.GetClient(), &apisv1alpha1.ProviderConfigUsage{}),
+			createDeploymentServiceFn:          newDeploymentService,
+			createServiceFromProviderConfigFn:  newDeploymentServiceFromProviderConfig,
+			createServiceFromManagedResourceFn: newDeploymentServiceFromManagedResource}),
 		managed.WithLogger(o.Logger.WithValues("controller", name)),
 		managed.WithPollInterval(o.PollInterval),
 		managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
@@ -95,29 +116,75 @@ type connector struct {
 	kube                      client.Client
 	usage                     resource.Tracker
 	createDeploymentServiceFn func(creds []byte) (*DeploymentService, error)
+	// Enhanced constructor that supports direct ProviderConfig integration
+	createServiceFromProviderConfigFn func(ctx context.Context, kubeClient client.Client, credSource xpv1.CredentialsSource, credSelectors xpv1.CommonCredentialSelectors, config deployment.AkashProviderConfiguration) (*DeploymentService, error)
+	// New constructor that handles managed resource with automatic credential and configuration loading
+	createServiceFromManagedResourceFn func(ctx context.Context, kubeClient client.Client, usage resource.Tracker, mg resource.Managed, pcInfo deployment.ProviderConfigInfo) (*DeploymentService, error)
 }
 
-// Connect typically produces an ExternalClient by:
-// 1. Tracking that the managed resource is using a ProviderConfig.
-// 2. Getting the managed resource's ProviderConfig.
-// 3. Getting the credentials specified by the ProviderConfig.
-// 4. Using the credentials to form a client.
+// Connect produces an ExternalClient with ready-to-use credentials automatically loaded from ProviderConfig
 func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.ExternalClient, error) {
 	cr, ok := mg.(*v1alpha1.Deployment)
 	if !ok {
 		return nil, errors.New(errNotDeployment)
 	}
 
-	if err := c.usage.Track(ctx, mg); err != nil {
-		return nil, errors.Wrap(err, errTrackPCUsage)
-	}
-
+	// Get the ProviderConfig referenced by the managed resource
 	pc := &apisv1alpha1.ProviderConfig{}
 	if err := c.kube.Get(ctx, types.NamespacedName{Name: cr.GetProviderConfigReference().Name}, pc); err != nil {
 		return nil, errors.Wrap(err, errGetPC)
 	}
 
 	cd := pc.Spec.Credentials
+
+	// Use the new enhanced constructor that handles everything internally
+	if c.createServiceFromManagedResourceFn != nil {
+		// Create ProviderConfig info struct directly using ProviderConfig types
+		pcInfo := deployment.ProviderConfigInfo{
+			Source:              cd.Source,
+			CredentialSelectors: cd.CommonCredentialSelectors,
+			Configuration:       pc.Spec.Configuration, // Use ProviderConfig type directly
+		}
+
+		// Create service with auto-loading credentials and configuration - this handles everything internally
+		svc, err := c.createServiceFromManagedResourceFn(ctx, c.kube, c.usage, mg, pcInfo)
+		if err != nil {
+			return nil, errors.Wrap(err, errNewClient)
+		}
+
+		return &external{service: svc}, nil
+	}
+
+	// Fallback to enhanced constructor if available
+	if c.createServiceFromProviderConfigFn != nil {
+		config := deployment.AkashProviderConfiguration{
+			KeyName:        deployment.DefaultKeyName,
+			KeyringBackend: deployment.DefaultKeyringBackend,
+			Net:            deployment.DefaultNet,
+			Version:        deployment.DefaultVersion,
+			ChainId:        deployment.DefaultChainId,
+			Node:           deployment.DefaultNode,
+			Home:           deployment.DefaultHome,
+			Path:           deployment.DefaultPath,
+			ProvidersApi:   deployment.DefaultProvidersApi,
+		}
+
+		if err := c.usage.Track(ctx, mg); err != nil {
+			return nil, errors.Wrap(err, errTrackPCUsage)
+		}
+
+		svc, err := c.createServiceFromProviderConfigFn(ctx, c.kube, cd.Source, cd.CommonCredentialSelectors, config)
+		if err != nil {
+			return nil, errors.Wrap(err, errNewClient)
+		}
+		return &external{service: svc}, nil
+	}
+
+	// Final fallback to legacy method
+	if err := c.usage.Track(ctx, mg); err != nil {
+		return nil, errors.Wrap(err, errTrackPCUsage)
+	}
+
 	data, err := resource.CommonCredentialExtractor(ctx, cd.Source, c.kube, cd.CommonCredentialSelectors)
 	if err != nil {
 		return nil, errors.Wrap(err, errGetCreds)
