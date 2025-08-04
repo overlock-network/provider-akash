@@ -47,6 +47,59 @@ spec:
           spec:
             description: A ProviderConfigSpec defines the desired state of a ProviderConfig.
             properties:
+              configuration:
+                description: Configuration contains Akash-specific configuration settings.
+                properties:
+                  accountAddress:
+                    description: AccountAddress is the Akash account address to use.
+                    type: string
+                  chainId:
+                    default: akashnet-2
+                    description: ChainId is the chain ID of the Akash network.
+                    type: string
+                  home:
+                    default: /tmp/.akash
+                    description: Home is the home directory for Akash configuration.
+                    type: string
+                  keyName:
+                    default: default
+                    description: KeyName is the name of the key to use for signing
+                      transactions.
+                    type: string
+                  keyringBackend:
+                    default: test
+                    description: KeyringBackend specifies the keyring backend to use.
+                    enum:
+                    - os
+                    - file
+                    - test
+                    - memory
+                    type: string
+                  net:
+                    default: mainnet
+                    description: Net specifies the Akash network to connect to.
+                    enum:
+                    - mainnet
+                    - testnet
+                    - sandbox
+                    type: string
+                  node:
+                    default: https://rpc.akashnet.io:443
+                    description: Node is the RPC endpoint of the Akash node.
+                    type: string
+                  path:
+                    default: /usr/local/bin/akash
+                    description: Path is the path to the Akash binary.
+                    type: string
+                  providersApi:
+                    default: https://akash-api.polkachu.com
+                    description: ProvidersApi is the URL of the Akash providers API.
+                    type: string
+                  version:
+                    default: 0.18.0
+                    description: Version specifies the Akash version to use.
+                    type: string
+                type: object
               credentials:
                 description: Credentials required to authenticate to this provider.
                 properties:

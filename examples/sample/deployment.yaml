@@ -7,17 +7,17 @@ spec:
     name: example
   forProvider:
     deployment: |
-              ---
-              version: "2.0"
+      ---
+      version: "2.0"
 
-              services:
-                mysql:
-                  image: mysql 
-                  expose:
-                    - port: 3306 
-                      to:
-                        - global: true
-                    - port: 8080
-                      as: 80
-                      to:
-                        - global: true
+      services:
+        mysql:
+          image: mysql 
+          expose:
+            - port: 3306 
+              to:
+                - global: true
+            - port: 8080
+              as: 80
+              to:
+                - global: true

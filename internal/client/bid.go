@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/overlock-network/provider-akash/internal/controller/client/cli"
-	"github.com/overlock-network/provider-akash/internal/controller/client/types"
+	"github.com/overlock-network/provider-akash/internal/client/cli"
+	"github.com/overlock-network/provider-akash/internal/client/types"
 )
 
 func (ak *AkashClient) GetBids(seqs Seqs, timeout time.Duration) (types.Bids, error) {

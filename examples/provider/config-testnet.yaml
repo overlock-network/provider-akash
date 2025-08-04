@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: testnet-provider-secret
+type: Opaque
+data:
+  credentials: "RVhBTVBMRQo="
+
+---
+
+apiVersion: akash.web7.md/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: testnet-example
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: default
+      name: testnet-provider-secret
+      key: credentials
+  configuration:
+    keyName: "testnet-key"
+    keyringBackend: "test"
+    net: "testnet"
+    chainId: "testnet-1"
+    node: "https://rpc.testnet.akash.network:443"
+    providersApi: "https://api.testnet.akash.network"
+    # Other fields will use defaults

@@ -4,7 +4,7 @@ metadata:
   name: example-provider-secret
 type: Opaque
 data:
-  credentials: ""
+  credentials: "RVhBTVBMRQo="
 
 ---
 
@@ -19,3 +19,13 @@ spec:
       namespace: default
       name: example-provider-secret
       key: credentials
+  configuration:
+    keyName: "default"
+    keyringBackend: "test"
+    net: "mainnet"
+    version: "0.18.0"
+    chainId: "akashnet-2"
+    node: "https://rpc.akashnet.io:443"
+    home: "/tmp/.akash"
+    path: "/usr/local/bin/akash"
+    providersApi: "https://akash-api.polkachu.com"

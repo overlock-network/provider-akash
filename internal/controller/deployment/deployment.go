@@ -23,7 +23,7 @@ import (
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	kubeclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/crossplane/crossplane-runtime/pkg/connection"
 	"github.com/crossplane/crossplane-runtime/pkg/controller"
@@ -34,7 +34,7 @@ import (
 
 	"github.com/overlock-network/provider-akash/apis/resource/v1alpha1"
 	apisv1alpha1 "github.com/overlock-network/provider-akash/apis/v1alpha1"
-	deployment "github.com/overlock-network/provider-akash/internal/controller/client"
+	client "github.com/overlock-network/provider-akash/internal/client"
 	"github.com/overlock-network/provider-akash/internal/features"
 )
 
@@ -48,18 +48,17 @@ const (
 )
 
 type DeploymentService struct {
-	client *deployment.AkashClient
+	client *client.AkashClient
 }
 
-var (
-	newDeploymentService = func(creds []byte) (*DeploymentService, error) {
-		c := deployment.New(context.Background(), deployment.AkashProviderConfiguration{Creds: creds})
-		client := &DeploymentService{
-			client: c,
-		}
-		return client, nil
+// newDeploymentService creates DeploymentService with AkashClient created from managed resource
+var newDeploymentService = func(ctx context.Context, kubeClient kubeclient.Client, usage resource.Tracker, mg resource.Managed, pcInfo client.ProviderConfigInfo) (*DeploymentService, error) {
+	c, err := client.NewFromManagedResource(ctx, kubeClient, usage, mg, pcInfo)
+	if err != nil {
+		return nil, err
 	}
-)
+	return &DeploymentService{client: c}, nil
+}
 
 // Setup adds a controller that reconciles Deployment managed resources.
 func Setup(mgr ctrl.Manager, o controller.Options) error {
@@ -73,7 +72,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 	r := managed.NewReconciler(mgr,
 		resource.ManagedKind(v1alpha1.DeploymentGroupVersionKind),
 		managed.WithExternalConnecter(&connector{
-			kube:                      mgr.GetClient(),
+			kubeClient:                mgr.GetClient(),
 			usage:                     resource.NewProviderConfigUsageTracker(mgr.GetClient(), &apisv1alpha1.ProviderConfigUsage{}),
 			createDeploymentServiceFn: newDeploymentService}),
 		managed.WithLogger(o.Logger.WithValues("controller", name)),
@@ -92,38 +91,33 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 // A connector is expected to produce an ExternalClient when its Connect method
 // is called.
 type connector struct {
-	kube                      client.Client
+	kubeClient                kubeclient.Client
 	usage                     resource.Tracker
-	createDeploymentServiceFn func(creds []byte) (*DeploymentService, error)
+	createDeploymentServiceFn func(ctx context.Context, kubeClient kubeclient.Client, usage resource.Tracker, mg resource.Managed, pcInfo client.ProviderConfigInfo) (*DeploymentService, error)
 }
 
-// Connect typically produces an ExternalClient by:
-// 1. Tracking that the managed resource is using a ProviderConfig.
-// 2. Getting the managed resource's ProviderConfig.
-// 3. Getting the credentials specified by the ProviderConfig.
-// 4. Using the credentials to form a client.
+// Connect produces an ExternalClient with ready-to-use AkashClient
 func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.ExternalClient, error) {
 	cr, ok := mg.(*v1alpha1.Deployment)
 	if !ok {
 		return nil, errors.New(errNotDeployment)
 	}
 
-	if err := c.usage.Track(ctx, mg); err != nil {
-		return nil, errors.Wrap(err, errTrackPCUsage)
-	}
-
+	// Get the ProviderConfig referenced by the managed resource
 	pc := &apisv1alpha1.ProviderConfig{}
-	if err := c.kube.Get(ctx, types.NamespacedName{Name: cr.GetProviderConfigReference().Name}, pc); err != nil {
+	if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: cr.GetProviderConfigReference().Name}, pc); err != nil {
 		return nil, errors.Wrap(err, errGetPC)
 	}
 
-	cd := pc.Spec.Credentials
-	data, err := resource.CommonCredentialExtractor(ctx, cd.Source, c.kube, cd.CommonCredentialSelectors)
-	if err != nil {
-		return nil, errors.Wrap(err, errGetCreds)
+	// Create ProviderConfig info struct directly using ProviderConfig types
+	pcInfo := client.ProviderConfigInfo{
+		Source:              pc.Spec.Credentials.Source,
+		CredentialSelectors: pc.Spec.Credentials.CommonCredentialSelectors,
+		Configuration:       pc.Spec.Configuration,
 	}
 
-	svc, err := c.createDeploymentServiceFn(data)
+	// Create service with AkashClient - this handles everything internally
+	svc, err := c.createDeploymentServiceFn(ctx, c.kubeClient, c.usage, mg, pcInfo)
 	if err != nil {
 		return nil, errors.Wrap(err, errNewClient)
 	}
@@ -144,6 +138,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	if !ok {
 		return managed.ExternalObservation{}, errors.New(errNotDeployment)
 	}
+
 	// These fmt statements should be removed in the real implementation.
 	fmt.Printf("Observing: %+v", cr)
 	deployment, err := c.service.client.GetDeployment("test", "test")

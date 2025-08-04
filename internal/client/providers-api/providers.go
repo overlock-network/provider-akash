@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/overlock-network/provider-akash/internal/controller/client/types"
+	"github.com/overlock-network/provider-akash/internal/client/types"
 )
 
 type provider struct {
