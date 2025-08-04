@@ -22,7 +22,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	
+
 	kubeClient, err := client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	if err != nil {
 		log.Fatal(err)
@@ -56,10 +56,10 @@ func main() {
 		ProvidersApi:   akashclient.DefaultProvidersApi,
 	}
 	client2 := akashclient.NewWithSecretRef(ctx, kubeClient, secretRef, config2)
-	
+
 	// Set custom cache TTL
 	client2.SetCredentialCacheTTL(10 * time.Minute)
-	
+
 	// Get credentials (will load from secret and cache)
 	creds, err := client2.GetCredentials()
 	if err != nil {
@@ -79,13 +79,13 @@ func main() {
 			Key: "private-key",
 		},
 	}
-	
+
 	client3, err := akashclient.NewFromProviderConfig(ctx, kubeClient, credSource, credSelectors, config2)
 	if err != nil {
 		fmt.Printf("Error creating client from ProviderConfig: %v\n", err)
 	} else {
 		fmt.Println("Created client from ProviderConfig (legacy)")
-		
+
 		// Force refresh of credentials
 		if err := client3.RefreshCredentials(); err != nil {
 			fmt.Printf("Error refreshing credentials: %v\n", err)
@@ -97,31 +97,31 @@ func main() {
 	// Example 4: Create client from managed resource (NEW APPROACH)
 	// This would typically be done in a controller with an actual managed resource
 	/*
-	// Mock managed resource (in reality this would be your v1alpha1.Deployment)
-	managedResource := &v1alpha1.Deployment{} // Your actual managed resource
-	usage := resource.NewProviderConfigUsageTracker(kubeClient, &apisv1alpha1.ProviderConfigUsage{})
-	
-	pcInfo := akashclient.ProviderConfigInfo{
-		Source: credSource,
-		CredentialSelectors: credSelectors,
-	}
-	
-	client4, err := akashclient.NewFromManagedResource(ctx, kubeClient, usage, managedResource, pcInfo, config2)
-	if err != nil {
-		fmt.Printf("Error creating client from managed resource: %v\n", err)
-	} else {
-		fmt.Println("Created client from managed resource - credentials auto-loaded!")
-		
-		// Credentials are automatically loaded and cached
-		creds4, err := client4.GetCredentials()
-		if err != nil {
-			fmt.Printf("Error getting credentials: %v\n", err)
-		} else {
-			fmt.Printf("Auto-loaded credentials (length: %d bytes)\n", len(creds4))
+		// Mock managed resource (in reality this would be your v1alpha1.Deployment)
+		managedResource := &v1alpha1.Deployment{} // Your actual managed resource
+		usage := resource.NewProviderConfigUsageTracker(kubeClient, &apisv1alpha1.ProviderConfigUsage{})
+
+		pcInfo := akashclient.ProviderConfigInfo{
+			Source: credSource,
+			CredentialSelectors: credSelectors,
 		}
-	}
+
+		client4, err := akashclient.NewFromManagedResource(ctx, kubeClient, usage, managedResource, pcInfo, config2)
+		if err != nil {
+			fmt.Printf("Error creating client from managed resource: %v\n", err)
+		} else {
+			fmt.Println("Created client from managed resource - credentials auto-loaded!")
+
+			// Credentials are automatically loaded and cached
+			creds4, err := client4.GetCredentials()
+			if err != nil {
+				fmt.Printf("Error getting credentials: %v\n", err)
+			} else {
+				fmt.Printf("Auto-loaded credentials (length: %d bytes)\n", len(creds4))
+			}
+		}
 	*/
-	
+
 	fmt.Println("\nNEW APPROACH:")
 	fmt.Println("In controllers, use NewFromManagedResource() which automatically:")
 	fmt.Println("1. Loads credentials from ProviderConfig referenced by managed resource")

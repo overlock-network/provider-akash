@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	
+
 	apisv1alpha1 "github.com/overlock-network/provider-akash/apis/v1alpha1"
 )
 

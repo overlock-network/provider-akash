@@ -29,7 +29,7 @@ import (
 type ProviderConfigSpec struct {
 	// Credentials required to authenticate to this provider.
 	Credentials ProviderCredentials `json:"credentials"`
-	
+
 	// Configuration contains Akash-specific configuration settings.
 	// +optional
 	Configuration *AkashConfiguration `json:"configuration,omitempty"`
@@ -50,48 +50,48 @@ type AkashConfiguration struct {
 	// +optional
 	// +kubebuilder:default="default"
 	KeyName *string `json:"keyName,omitempty"`
-	
+
 	// KeyringBackend specifies the keyring backend to use.
 	// +optional
 	// +kubebuilder:validation:Enum=os;file;test;memory
 	// +kubebuilder:default="test"
 	KeyringBackend *string `json:"keyringBackend,omitempty"`
-	
+
 	// AccountAddress is the Akash account address to use.
 	// +optional
 	AccountAddress *string `json:"accountAddress,omitempty"`
-	
+
 	// Net specifies the Akash network to connect to.
 	// +optional
 	// +kubebuilder:validation:Enum=mainnet;testnet;sandbox
 	// +kubebuilder:default="mainnet"
 	Net *string `json:"net,omitempty"`
-	
+
 	// Version specifies the Akash version to use.
 	// +optional
 	// +kubebuilder:default="0.18.0"
 	Version *string `json:"version,omitempty"`
-	
+
 	// ChainId is the chain ID of the Akash network.
 	// +optional
 	// +kubebuilder:default="akashnet-2"
 	ChainId *string `json:"chainId,omitempty"`
-	
+
 	// Node is the RPC endpoint of the Akash node.
 	// +optional
 	// +kubebuilder:default="https://rpc.akashnet.io:443"
 	Node *string `json:"node,omitempty"`
-	
+
 	// Home is the home directory for Akash configuration.
 	// +optional
 	// +kubebuilder:default="/tmp/.akash"
 	Home *string `json:"home,omitempty"`
-	
+
 	// Path is the path to the Akash binary.
 	// +optional
 	// +kubebuilder:default="/usr/local/bin/akash"
 	Path *string `json:"path,omitempty"`
-	
+
 	// ProvidersApi is the URL of the Akash providers API.
 	// +optional
 	// +kubebuilder:default="https://akash-api.polkachu.com"

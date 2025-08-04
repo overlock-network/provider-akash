@@ -10,7 +10,7 @@ import (
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
-	
+
 	apisv1alpha1 "github.com/overlock-network/provider-akash/apis/v1alpha1"
 )
 
@@ -18,13 +18,13 @@ type AkashClient struct {
 	ctx             context.Context
 	Config          AkashProviderConfiguration
 	transactionNote string
-	
+
 	// Kubernetes-based credential loading
-	kubeClient       client.Client
-	credentialCache  *credentialCache
-	secretRef        *SecretReference
-	managedResource  resource.Managed  // Managed resource with ProviderConfigReference
-	usage            resource.Tracker  // For tracking ProviderConfig usage
+	kubeClient      client.Client
+	credentialCache *credentialCache
+	secretRef       *SecretReference
+	managedResource resource.Managed // Managed resource with ProviderConfigReference
+	usage           resource.Tracker // For tracking ProviderConfig usage
 }
 
 type SecretReference struct {
@@ -86,9 +86,9 @@ func NewWithSecretRef(ctx context.Context, kubeClient client.Client, secretRef S
 
 // ProviderConfigInfo contains the credentials and configuration information from a ProviderConfig
 type ProviderConfigInfo struct {
-	Source            xpv1.CredentialsSource
+	Source              xpv1.CredentialsSource
 	CredentialSelectors xpv1.CommonCredentialSelectors
-	Configuration     *apisv1alpha1.AkashConfiguration
+	Configuration       *apisv1alpha1.AkashConfiguration
 }
 
 // Helper function to get string value with default fallback
@@ -115,7 +115,7 @@ func buildAkashProviderConfiguration(config *apisv1alpha1.AkashConfiguration) Ak
 			ProvidersApi:   DefaultProvidersApi,
 		}
 	}
-	
+
 	// Build configuration with values from ProviderConfig, using constants for defaults
 	return AkashProviderConfiguration{
 		KeyName:        getStringValue(config.KeyName, DefaultKeyName),
@@ -132,12 +132,12 @@ func buildAkashProviderConfiguration(config *apisv1alpha1.AkashConfiguration) Ak
 	}
 }
 
-// NewFromManagedResource creates a new AkashClient that automatically loads credentials 
+// NewFromManagedResource creates a new AkashClient that automatically loads credentials
 // and configuration from the ProviderConfig referenced by the managed resource
 func NewFromManagedResource(ctx context.Context, kubeClient client.Client, usage resource.Tracker, mg resource.Managed, pcInfo ProviderConfigInfo) (*AkashClient, error) {
 	// Build AkashProviderConfiguration from ProviderConfigInfo
 	config := buildAkashProviderConfiguration(pcInfo.Configuration)
-	
+
 	client := &AkashClient{
 		ctx:             ctx,
 		Config:          config,
@@ -148,7 +148,7 @@ func NewFromManagedResource(ctx context.Context, kubeClient client.Client, usage
 			ttl: 5 * time.Minute, // Default TTL for credential cache
 		},
 	}
-	
+
 	// Set up secret reference if using secrets
 	if pcInfo.Source == xpv1.CredentialsSourceSecret && pcInfo.CredentialSelectors.SecretRef != nil {
 		client.secretRef = &SecretReference{
@@ -157,20 +157,20 @@ func NewFromManagedResource(ctx context.Context, kubeClient client.Client, usage
 			Key:       pcInfo.CredentialSelectors.SecretRef.Key,
 		}
 	}
-	
+
 	// Load credentials immediately using the provided ProviderConfig info
 	creds, err := resource.CommonCredentialExtractor(ctx, pcInfo.Source, kubeClient, pcInfo.CredentialSelectors)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to load credentials from ProviderConfig")
 	}
-	
+
 	// Track ProviderConfig usage
 	if usage != nil {
 		if err := usage.Track(ctx, mg); err != nil {
 			return nil, errors.Wrap(err, "cannot track ProviderConfig usage")
 		}
 	}
-	
+
 	// Set the credentials in config and cache
 	client.Config.Creds = creds
 	if client.credentialCache != nil {
@@ -179,7 +179,7 @@ func NewFromManagedResource(ctx context.Context, kubeClient client.Client, usage
 		client.credentialCache.lastUpdated = time.Now()
 		client.credentialCache.mu.Unlock()
 	}
-	
+
 	return client, nil
 }
 
@@ -190,7 +190,7 @@ func NewFromProviderConfig(ctx context.Context, kubeClient client.Client, credSo
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// If using Secret source, set up secret reference for future credential loading
 	if credSource == xpv1.CredentialsSourceSecret && credSelectors.SecretRef != nil {
 		secretRef := SecretReference{
@@ -198,12 +198,12 @@ func NewFromProviderConfig(ctx context.Context, kubeClient client.Client, credSo
 			Namespace: credSelectors.SecretRef.Namespace,
 			Key:       credSelectors.SecretRef.Key,
 		}
-		
+
 		client := NewWithSecretRef(ctx, kubeClient, secretRef, config)
 		client.Config.Creds = creds
 		return client, nil
 	}
-	
+
 	// For non-secret sources, use direct credentials
 	config.Creds = creds
 	return New(ctx, config), nil
@@ -215,12 +215,12 @@ func (ak *AkashClient) GetCredentials() ([]byte, error) {
 	if ak.secretRef == nil {
 		return ak.Config.Creds, nil
 	}
-	
+
 	// Check cache first
 	if creds := ak.getCachedCredentials(); creds != nil {
 		return creds, nil
 	}
-	
+
 	// Load from secret and cache
 	return ak.loadAndCacheCredentials()
 }
@@ -230,14 +230,14 @@ func (ak *AkashClient) getCachedCredentials() []byte {
 	if ak.credentialCache == nil {
 		return nil
 	}
-	
+
 	ak.credentialCache.mu.RLock()
 	defer ak.credentialCache.mu.RUnlock()
-	
+
 	if time.Since(ak.credentialCache.lastUpdated) > ak.credentialCache.ttl {
 		return nil
 	}
-	
+
 	return ak.credentialCache.credentials
 }
 
@@ -246,7 +246,7 @@ func (ak *AkashClient) loadAndCacheCredentials() ([]byte, error) {
 	if ak.kubeClient == nil || ak.secretRef == nil {
 		return ak.Config.Creds, nil
 	}
-	
+
 	// Create credential selectors from secret reference
 	credSelectors := xpv1.CommonCredentialSelectors{
 		SecretRef: &xpv1.SecretKeySelector{
@@ -257,13 +257,13 @@ func (ak *AkashClient) loadAndCacheCredentials() ([]byte, error) {
 			Key: ak.secretRef.Key,
 		},
 	}
-	
+
 	// Load credentials from secret
 	creds, err := resource.CommonCredentialExtractor(ak.ctx, xpv1.CredentialsSourceSecret, ak.kubeClient, credSelectors)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Cache the credentials
 	if ak.credentialCache != nil {
 		ak.credentialCache.mu.Lock()
@@ -271,10 +271,10 @@ func (ak *AkashClient) loadAndCacheCredentials() ([]byte, error) {
 		ak.credentialCache.lastUpdated = time.Now()
 		ak.credentialCache.mu.Unlock()
 	}
-	
+
 	// Update config for immediate use
 	ak.Config.Creds = creds
-	
+
 	return creds, nil
 }
 
@@ -283,7 +283,7 @@ func (ak *AkashClient) RefreshCredentials() error {
 	if ak.secretRef == nil {
 		return nil // Nothing to refresh for direct credentials
 	}
-	
+
 	_, err := ak.loadAndCacheCredentials()
 	return err
 }
