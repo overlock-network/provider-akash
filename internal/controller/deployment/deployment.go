@@ -51,7 +51,7 @@ type DeploymentService struct {
 	client *client.AkashClient
 }
 
-// newDeploymentService creates DeploymentService with AkashClient created from managed resource  
+// newDeploymentService creates DeploymentService with AkashClient created from managed resource
 var newDeploymentService = func(ctx context.Context, kubeClient kubeclient.Client, usage resource.Tracker, mg resource.Managed, pcInfo client.ProviderConfigInfo) (*DeploymentService, error) {
 	c, err := client.NewFromManagedResource(ctx, kubeClient, usage, mg, pcInfo)
 	if err != nil {
@@ -138,6 +138,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	if !ok {
 		return managed.ExternalObservation{}, errors.New(errNotDeployment)
 	}
+
 	// These fmt statements should be removed in the real implementation.
 	fmt.Printf("Observing: %+v", cr)
 	deployment, err := c.service.client.GetDeployment("test", "test")

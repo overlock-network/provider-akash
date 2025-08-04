@@ -4,7 +4,7 @@ metadata:
   name: minimal-provider-secret
 type: Opaque
 data:
-  credentials: ""
+  credentials: "RVhBTVBMRQo="
 
 ---
 
