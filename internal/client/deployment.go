@@ -4,14 +4,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/cosmos/cosmos-sdk/codec"
-	"github.com/cosmos/cosmos-sdk/codec/types"
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
-	"github.com/cosmos/cosmos-sdk/client/flags"
-	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
 	deploymenttypes "pkg.akt.dev/go/node/deployment/v1beta3"
-	akashclient "pkg.akt.dev/go/node/client/v1beta3"
 	clienttypes "github.com/overlock-network/provider-akash/internal/client/types"
 )
 
@@ -21,60 +15,9 @@ type Seqs struct {
 	Oseq string
 }
 
-// getAkashNodeClient creates and returns an Akash node client using the stored credentials
-func (ak *AkashClient) getAkashNodeClient() (akashclient.Client, error) {
-	creds, err := ak.GetCredentials()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get credentials: %w", err)
-	}
-
-	if len(creds) == 0 {
-		return nil, fmt.Errorf("no credentials available")
-	}
-
-	interfaceRegistry := types.NewInterfaceRegistry()
-	cdc := codec.NewProtoCodec(interfaceRegistry)
-	
-	kr := keyring.NewInMemory(cdc)
-	
-	err = kr.ImportPrivKey(ak.Config.KeyName, string(creds), "")
-	if err != nil {
-		return nil, fmt.Errorf("failed to import private key: %w", err)
-	}
-
-	clientCtx := sdkclient.Context{}.
-		WithKeyring(kr).
-		WithChainID(ak.Config.ChainId).
-		WithNodeURI(ak.Config.Node).
-		WithClient(nil).
-		WithBroadcastMode(flags.BroadcastSync).
-		WithFromName(ak.Config.KeyName).
-		WithFromAddress(nil).
-		WithSkipConfirmation(true).
-		WithTxConfig(nil).
-		WithAccountRetriever(nil).
-		WithInput(nil).
-		WithOutput(nil).
-		WithViper("")
-
-	if ak.Config.AccountAddress != "" {
-		addr, err := sdktypes.AccAddressFromBech32(ak.Config.AccountAddress)
-		if err != nil {
-			return nil, fmt.Errorf("invalid account address %s: %w", ak.Config.AccountAddress, err)
-		}
-		clientCtx = clientCtx.WithFromAddress(addr)
-	}
-
-	client, err := akashclient.NewClient(ak.ctx, clientCtx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create akash client: %w", err)
-	}
-
-	return client, nil
-}
 
 func (ak *AkashClient) GetDeployments(owner string) ([]clienttypes.DeploymentId, error) {
-	client, err := ak.getAkashNodeClient()
+	client, err := ak.getNodeClient()
 	if err != nil {
 		fmt.Printf("Would query deployments for owner: %s\n", owner)
 		return []clienttypes.DeploymentId{
@@ -97,7 +40,7 @@ func (ak *AkashClient) GetDeployment(dseq string, owner string) (clienttypes.Dep
 		return clienttypes.Deployment{}, fmt.Errorf("invalid dseq: %w", err)
 	}
 
-	client, err := ak.getAkashNodeClient()
+	client, err := ak.getNodeClient()
 	if err != nil {
 		fmt.Printf("Would query deployment with DSEQ: %s, Owner: %s\n", dseq, owner)
 		return clienttypes.Deployment{
@@ -135,7 +78,7 @@ func (ak *AkashClient) GetDeployment(dseq string, owner string) (clienttypes.Dep
 func (ak *AkashClient) CreateDeployment(manifestLocation string) (Seqs, error) {
 	fmt.Println("Creating deployment with akash node client")
 	
-	client, err := ak.getAkashNodeClient()
+	client, err := ak.getNodeClient()
 	if err != nil {
 		fmt.Printf("Would create deployment from manifest: %s\n", manifestLocation)
 		return Seqs{
@@ -179,7 +122,7 @@ func (ak *AkashClient) DeleteDeployment(dseq string, owner string) error {
 		return fmt.Errorf("invalid dseq: %w", err)
 	}
 
-	client, err := ak.getAkashNodeClient()
+	client, err := ak.getNodeClient()
 	if err != nil {
 		fmt.Printf("Would delete deployment DSEQ: %s, Owner: %s\n", dseq, owner)
 		return nil
@@ -208,7 +151,7 @@ func (ak *AkashClient) UpdateDeployment(dseq string, manifestLocation string) er
 		return fmt.Errorf("invalid dseq: %w", err)
 	}
 
-	client, err := ak.getAkashNodeClient()
+	client, err := ak.getNodeClient()
 	if err != nil {
 		fmt.Printf("Would update deployment DSEQ: %s with manifest: %s\n", dseq, manifestLocation)
 		return nil
