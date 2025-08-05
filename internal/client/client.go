@@ -2,10 +2,18 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
+	"github.com/cosmos/cosmos-sdk/codec"
+	"github.com/cosmos/cosmos-sdk/codec/types"
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
+	"github.com/cosmos/cosmos-sdk/client/flags"
+	"github.com/cosmos/cosmos-sdk/crypto/keyring"
+	sdktypes "github.com/cosmos/cosmos-sdk/types"
 	"github.com/pkg/errors"
+	akashclient "pkg.akt.dev/go/node/client/v1beta3"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
@@ -295,4 +303,56 @@ func (ak *AkashClient) SetCredentialCacheTTL(ttl time.Duration) {
 		ak.credentialCache.ttl = ttl
 		ak.credentialCache.mu.Unlock()
 	}
+}
+
+// getNodeClient creates and returns an Akash node client using the stored credentials
+func (ak *AkashClient) getNodeClient() (akashclient.Client, error) {
+	creds, err := ak.GetCredentials()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get credentials: %w", err)
+	}
+
+	if len(creds) == 0 {
+		return nil, fmt.Errorf("no credentials available")
+	}
+
+	interfaceRegistry := types.NewInterfaceRegistry()
+	cdc := codec.NewProtoCodec(interfaceRegistry)
+	
+	kr := keyring.NewInMemory(cdc)
+	
+	err = kr.ImportPrivKey(ak.Config.KeyName, string(creds), "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to import private key: %w", err)
+	}
+
+	clientCtx := sdkclient.Context{}.
+		WithKeyring(kr).
+		WithChainID(ak.Config.ChainId).
+		WithNodeURI(ak.Config.Node).
+		WithClient(nil).
+		WithBroadcastMode(flags.BroadcastSync).
+		WithFromName(ak.Config.KeyName).
+		WithFromAddress(nil).
+		WithSkipConfirmation(true).
+		WithTxConfig(nil).
+		WithAccountRetriever(nil).
+		WithInput(nil).
+		WithOutput(nil).
+		WithViper("")
+
+	if ak.Config.AccountAddress != "" {
+		addr, err := sdktypes.AccAddressFromBech32(ak.Config.AccountAddress)
+		if err != nil {
+			return nil, fmt.Errorf("invalid account address %s: %w", ak.Config.AccountAddress, err)
+		}
+		clientCtx = clientCtx.WithFromAddress(addr)
+	}
+
+	client, err := akashclient.NewClient(ak.ctx, clientCtx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create akash client: %w", err)
+	}
+
+	return client, nil
 }
