@@ -5,7 +5,8 @@ import (
 	"strconv"
 
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
-	deploymenttypes "pkg.akt.dev/go/node/deployment/v1beta3"
+	deploymenttypes "pkg.akt.dev/go/node/deployment/v1beta4"
+	deploymentv1 "pkg.akt.dev/go/node/deployment/v1"
 	clienttypes "github.com/overlock-network/provider-akash/internal/client/types"
 )
 
@@ -19,19 +20,30 @@ type Seqs struct {
 func (ak *AkashClient) GetDeployments(owner string) ([]clienttypes.DeploymentId, error) {
 	client, err := ak.getNodeClient()
 	if err != nil {
-		fmt.Printf("Would query deployments for owner: %s\n", owner)
-		return []clienttypes.DeploymentId{
-			{Dseq: "12345", Owner: owner},
-			{Dseq: "67890", Owner: owner},
-		}, nil
+		return nil, fmt.Errorf("failed to get node client: %w", err)
 	}
 
 	queryClient := client.Query()
 	deploymentQuery := queryClient.Deployment()
 	
-	fmt.Printf("Would query deployments using client: %+v\n", deploymentQuery)
-	
-	return []clienttypes.DeploymentId{}, fmt.Errorf("deployment query implementation pending")
+	deploymentsResp, err := deploymentQuery.Deployments(ak.ctx, &deploymenttypes.QueryDeploymentsRequest{
+		Filters: deploymenttypes.DeploymentFilters{
+			Owner: owner,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to query deployments: %w", err)
+	}
+
+	var deployments []clienttypes.DeploymentId
+	for _, deploymentResp := range deploymentsResp.Deployments {
+		deployments = append(deployments, clienttypes.DeploymentId{
+			Dseq:  fmt.Sprintf("%d", deploymentResp.Deployment.ID.DSeq),
+			Owner: deploymentResp.Deployment.ID.Owner,
+		})
+	}
+
+	return deployments, nil
 }
 
 func (ak *AkashClient) GetDeployment(dseq string, owner string) (clienttypes.Deployment, error) {
@@ -42,27 +54,10 @@ func (ak *AkashClient) GetDeployment(dseq string, owner string) (clienttypes.Dep
 
 	client, err := ak.getNodeClient()
 	if err != nil {
-		fmt.Printf("Would query deployment with DSEQ: %s, Owner: %s\n", dseq, owner)
-		return clienttypes.Deployment{
-			DeploymentInfo: clienttypes.DeploymentInfo{
-				State: "active",
-				DeploymentId: clienttypes.DeploymentId{
-					Dseq:  dseq,
-					Owner: owner,
-				},
-			},
-			EscrowAccount: clienttypes.EscrowAccount{
-				Owner: owner,
-				State: "open",
-				Balance: clienttypes.EscrowAccountBalance{
-					Denom:  "uakt",
-					Amount: "1000000",
-				},
-			},
-		}, nil
+		return clienttypes.Deployment{}, fmt.Errorf("failed to get node client: %w", err)
 	}
 
-	deploymentID := deploymenttypes.DeploymentID{
+	deploymentID := deploymentv1.DeploymentID{
 		DSeq:  dseqUint,
 		Owner: owner,
 	}
@@ -70,9 +65,30 @@ func (ak *AkashClient) GetDeployment(dseq string, owner string) (clienttypes.Dep
 	queryClient := client.Query()
 	deploymentQuery := queryClient.Deployment()
 	
-	fmt.Printf("Would query deployment %+v using client: %+v\n", deploymentID, deploymentQuery)
-	
-	return clienttypes.Deployment{}, fmt.Errorf("deployment query implementation pending")
+	deploymentResp, err := deploymentQuery.Deployment(ak.ctx, &deploymenttypes.QueryDeploymentRequest{
+		ID: deploymentID,
+	})
+	if err != nil {
+		return clienttypes.Deployment{}, fmt.Errorf("failed to query deployment: %w", err)
+	}
+
+	return clienttypes.Deployment{
+		DeploymentInfo: clienttypes.DeploymentInfo{
+			State: deploymentResp.Deployment.State.String(),
+			DeploymentId: clienttypes.DeploymentId{
+				Dseq:  fmt.Sprintf("%d", deploymentResp.Deployment.ID.DSeq),
+				Owner: deploymentResp.Deployment.ID.Owner,
+			},
+		},
+		EscrowAccount: clienttypes.EscrowAccount{
+			Owner: deploymentResp.EscrowAccount.Owner,
+			State: deploymentResp.EscrowAccount.State.String(),
+			Balance: clienttypes.EscrowAccountBalance{
+				Denom:  deploymentResp.EscrowAccount.Balance.Denom,
+				Amount: deploymentResp.EscrowAccount.Balance.Amount.String(),
+			},
+		},
+	}, nil
 }
 
 func (ak *AkashClient) CreateDeployment(manifestLocation string) (Seqs, error) {
@@ -91,12 +107,12 @@ func (ak *AkashClient) CreateDeployment(manifestLocation string) (Seqs, error) {
 	groups := []deploymenttypes.GroupSpec{}
 	
 	msg := &deploymenttypes.MsgCreateDeployment{
-		ID: deploymenttypes.DeploymentID{
+		ID: deploymentv1.DeploymentID{
 			Owner: ak.Config.AccountAddress,
 			DSeq:  0,
 		},
 		Groups:   groups,
-		Version:  []byte("1.0"),
+		Hash:     []byte("1.0"),
 		Deposit:  sdktypes.NewInt64Coin("uakt", 5000000),
 		Depositor: ak.Config.AccountAddress,
 	}
@@ -129,7 +145,7 @@ func (ak *AkashClient) DeleteDeployment(dseq string, owner string) error {
 	}
 
 	msg := &deploymenttypes.MsgCloseDeployment{
-		ID: deploymenttypes.DeploymentID{
+		ID: deploymentv1.DeploymentID{
 			DSeq:  dseqUint,
 			Owner: owner,
 		},
@@ -158,11 +174,11 @@ func (ak *AkashClient) UpdateDeployment(dseq string, manifestLocation string) er
 	}
 
 	msg := &deploymenttypes.MsgUpdateDeployment{
-		ID: deploymenttypes.DeploymentID{
+		ID: deploymentv1.DeploymentID{
 			DSeq:  dseqUint,
 			Owner: ak.Config.AccountAddress,
 		},
-		Version: []byte("1.1.0"),
+		Hash: []byte("1.1.0"),
 	}
 
 	txClient := client.Tx()
