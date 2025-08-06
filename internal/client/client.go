@@ -6,10 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cosmos/cosmos-sdk/codec"
-	"github.com/cosmos/cosmos-sdk/codec/types"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
+	"github.com/cosmos/cosmos-sdk/codec"
+	"github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
 	"github.com/pkg/errors"
@@ -318,9 +318,11 @@ func (ak *AkashClient) getNodeClient() (akashclient.Client, error) {
 
 	interfaceRegistry := types.NewInterfaceRegistry()
 	cdc := codec.NewProtoCodec(interfaceRegistry)
-	
+
 	kr := keyring.NewInMemory(cdc)
-	
+
+	fmt.Println(string(creds))
+
 	err = kr.ImportPrivKey(ak.Config.KeyName, string(creds), "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to import private key: %w", err)

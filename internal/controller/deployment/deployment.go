@@ -139,27 +139,57 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		return managed.ExternalObservation{}, errors.New(errNotDeployment)
 	}
 
-	// These fmt statements should be removed in the real implementation.
 	fmt.Printf("Observing: %+v", cr)
-	deployment, err := c.service.client.GetDeployment("test", "test")
-	fmt.Println(deployment)
-	if err != nil {
-		fmt.Println(err)
+
+	// Extract deployment identification from the managed resource
+	// In Crossplane, the external-name annotation typically contains the external resource ID
+	externalName := cr.GetAnnotations()
+	var dseq string
+	if externalName != nil {
+		dseq = externalName["crossplane.io/external-name"]
 	}
+	
+	// If no external name is set, this resource hasn't been created yet
+	if dseq == "" {
+		fmt.Printf("No external-name annotation found, deployment not yet created\n")
+		return managed.ExternalObservation{
+			ResourceExists:   false,
+			ResourceUpToDate: false,
+		}, nil
+	}
+
+	// Extract owner from the managed resource spec or use a default
+	// For now, we'll need to determine how to get the owner - this might come from:
+	// 1. The ProviderConfig account address
+	// 2. A parameter in the DeploymentSpec
+	// 3. An annotation
+	// Using the client's account address as the owner for now
+	owner := c.service.client.Config.AccountAddress
+	
+	fmt.Printf("Querying deployment with DSEQ: %s, Owner: %s\n", dseq, owner)
+	deployment, err := c.service.client.GetDeployment(dseq, owner)
+	if err != nil {
+		fmt.Printf("Error querying deployment: %v\n", err)
+		// If deployment doesn't exist on Akash network, mark as not existing
+		return managed.ExternalObservation{
+			ResourceExists:   false,
+			ResourceUpToDate: false,
+		}, nil
+	}
+
+	fmt.Printf("Found deployment: %+v\n", deployment)
+	
+	// Update the observed status with deployment information
+	cr.Status.AtProvider.ObservableField = deployment.DeploymentInfo.State
+	
 	return managed.ExternalObservation{
-		// Return false when the external resource does not exist. This lets
-		// the managed resource reconciler know that it needs to call Create to
-		// (re)create the resource, or that it has successfully been deleted.
-		ResourceExists: false,
-
-		// Return false when the external resource exists, but it not up to date
-		// with the desired managed resource state. This lets the managed
-		// resource reconciler know that it needs to call Update.
-		ResourceUpToDate: false,
-
-		// Return any details that may be required to connect to the external
-		// resource. These will be stored as the connection secret.
-		ConnectionDetails: managed.ConnectionDetails{},
+		ResourceExists:   true,
+		ResourceUpToDate: true, // For now, assume up to date - can add more logic later
+		ConnectionDetails: managed.ConnectionDetails{
+			"dseq":  []byte(deployment.DeploymentInfo.DeploymentId.Dseq),
+			"owner": []byte(deployment.DeploymentInfo.DeploymentId.Owner),
+			"state": []byte(deployment.DeploymentInfo.State),
+		},
 	}, nil
 }
 
@@ -170,14 +200,35 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	}
 
 	fmt.Printf("Creating: %+v", cr)
-	_, err := c.service.client.CreateDeployment("test")
+	
+	// Get manifest location from the deployment parameter
+	manifestLocation := cr.Spec.ForProvider.Deployment
+	if manifestLocation == "" {
+		manifestLocation = "test" // fallback for now
+	}
+	
+	seqs, err := c.service.client.CreateDeployment(manifestLocation)
 	if err != nil {
 		return managed.ExternalCreation{}, err
 	}
+	
+	fmt.Printf("Created deployment with DSEQ: %s\n", seqs.Dseq)
+	
+	// Set the external name annotation so Observe can find this deployment
+	if cr.GetAnnotations() == nil {
+		cr.SetAnnotations(make(map[string]string))
+	}
+	annotations := cr.GetAnnotations()
+	annotations["crossplane.io/external-name"] = seqs.Dseq
+	cr.SetAnnotations(annotations)
+	
 	return managed.ExternalCreation{
-		// Optionally return any details that may be required to connect to the
-		// external resource. These will be stored as the connection secret.
-		ConnectionDetails: managed.ConnectionDetails{},
+		ConnectionDetails: managed.ConnectionDetails{
+			"dseq": []byte(seqs.Dseq),
+			"gseq": []byte(seqs.Gseq), 
+			"oseq": []byte(seqs.Oseq),
+			"owner": []byte(c.service.client.Config.AccountAddress),
+		},
 	}, nil
 }
 
@@ -189,10 +240,34 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 
 	fmt.Printf("Updating: %+v", cr)
 
+	// Extract deployment ID from external-name annotation
+	externalName := cr.GetAnnotations()
+	var dseq string
+	if externalName != nil {
+		dseq = externalName["crossplane.io/external-name"]
+	}
+	
+	if dseq == "" {
+		return managed.ExternalUpdate{}, errors.New("cannot update deployment: no external-name annotation found")
+	}
+	
+	// Get manifest location from the deployment parameter
+	manifestLocation := cr.Spec.ForProvider.Deployment
+	if manifestLocation == "" {
+		manifestLocation = "test" // fallback for now
+	}
+	
+	fmt.Printf("Updating deployment %s with manifest: %s\n", dseq, manifestLocation)
+	err := c.service.client.UpdateDeployment(dseq, manifestLocation)
+	if err != nil {
+		return managed.ExternalUpdate{}, err
+	}
+
 	return managed.ExternalUpdate{
-		// Optionally return any details that may be required to connect to the
-		// external resource. These will be stored as the connection secret.
-		ConnectionDetails: managed.ConnectionDetails{},
+		ConnectionDetails: managed.ConnectionDetails{
+			"dseq": []byte(dseq),
+			"owner": []byte(c.service.client.Config.AccountAddress),
+		},
 	}, nil
 }
 
@@ -204,5 +279,29 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 
 	fmt.Printf("Deleting: %+v", cr)
 
+	// Extract deployment ID from external-name annotation
+	externalName := cr.GetAnnotations()
+	var dseq string
+	if externalName != nil {
+		dseq = externalName["crossplane.io/external-name"]
+	}
+	
+	// If no external name, deployment was never created or already deleted
+	if dseq == "" {
+		fmt.Printf("No external-name found, deployment already deleted or never created\n")
+		return nil
+	}
+	
+	// Use the account address from the client as the owner
+	owner := c.service.client.Config.AccountAddress
+	
+	fmt.Printf("Deleting deployment with DSEQ: %s, Owner: %s\n", dseq, owner)
+	err := c.service.client.DeleteDeployment(dseq, owner)
+	if err != nil {
+		fmt.Printf("Error deleting deployment: %v\n", err)
+		return err
+	}
+	
+	fmt.Printf("Successfully deleted deployment %s\n", dseq)
 	return nil
 }
