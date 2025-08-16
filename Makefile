@@ -87,20 +87,20 @@ run: go.build
 	@# To see other arguments that can be provided, run the command with --help instead
 	$(GO_OUT_DIR)/provider --debug
 
-dev: $(KIND) $(KUBECTL)
-	@$(INFO) Creating kind cluster
-	@$(KIND) create cluster --name=$(PROJECT_NAME)-dev
-	@$(KUBECTL) cluster-info --context kind-$(PROJECT_NAME)-dev
-	@$(INFO) Installing Crossplane CRDs
-	@$(KUBECTL) apply -k https://github.com/crossplane/crossplane//cluster?ref=master
-	@$(INFO) Installing Provider Akash CRDs
-	@$(KUBECTL) apply -R -f package/crds
-	@$(INFO) Starting Provider Akash controllers
-	@$(GO) run cmd/provider/main.go --debug
+dev: $(KUBECTL) $(OVERLOCK)
+	@$(INFO) Starting development environment
+	@if ! $(KUBECTL) config get-contexts kind-akash >/dev/null 2>&1; then \
+		$(INFO) Creating akash environment; \
+		$(OVERLOCK) env create akash; \
+	else \
+		$(INFO) Environment akash already exists; \
+	fi
+	@$(INFO) Running provider in development mode
+	@$(OVERLOCK) provider serve
 
-dev-clean: $(KIND) $(KUBECTL)
-	@$(INFO) Deleting kind cluster
-	@$(KIND) delete cluster --name=$(PROJECT_NAME)-dev
+dev-clean: $(OVERLOCK)
+	@$(INFO) Deleting development environment
+	@$(OVERLOCK) env delete akash --confirm
 
 .PHONY: submodules fallthrough test-integration run dev dev-clean
 
