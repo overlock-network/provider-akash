@@ -1,5 +1,5 @@
 run:
-  deadline: 2m
+  deadline: 10m
 
   skip-files:
   - "zz_generated\\..+\\.go$"
@@ -115,6 +115,9 @@ linters:
     - unconvert
     - misspell
     - nakedret
+
+  disable:
+    - typecheck  # Disabled due to golangci-lint v1.54.0 compatibility issues with Go 1.21+
 
   presets:
     - bugs
