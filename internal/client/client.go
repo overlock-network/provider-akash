@@ -50,6 +50,7 @@ type credentialCache struct {
 
 type AkashProviderConfiguration struct {
 	Creds          []byte
+	Passphrase     []byte
 	KeyName        string
 	KeyringBackend string
 	AccountAddress string
@@ -96,6 +97,8 @@ func NewWithSecretRef(ctx context.Context, kubeClient client.Client, secretRef S
 type ProviderConfigInfo struct {
 	Source              xpv1.CredentialsSource
 	CredentialSelectors xpv1.CommonCredentialSelectors
+	PassphraseSource    *xpv1.CredentialsSource
+	PassphraseSelectors *xpv1.CommonCredentialSelectors
 	Configuration       *apisv1alpha1.AkashConfiguration
 }
 
@@ -172,6 +175,15 @@ func NewFromManagedResource(ctx context.Context, kubeClient client.Client, usage
 		return nil, errors.Wrap(err, "failed to load credentials from ProviderConfig")
 	}
 
+	// Load passphrase if configured
+	var passphrase []byte
+	if pcInfo.PassphraseSource != nil && pcInfo.PassphraseSelectors != nil {
+		passphrase, err = resource.CommonCredentialExtractor(ctx, *pcInfo.PassphraseSource, kubeClient, *pcInfo.PassphraseSelectors)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to load passphrase from ProviderConfig")
+		}
+	}
+
 	// Track ProviderConfig usage
 	if usage != nil {
 		if err := usage.Track(ctx, mg); err != nil {
@@ -179,8 +191,9 @@ func NewFromManagedResource(ctx context.Context, kubeClient client.Client, usage
 		}
 	}
 
-	// Set the credentials in config and cache
+	// Set the credentials and passphrase in config and cache
 	client.Config.Creds = creds
+	client.Config.Passphrase = passphrase
 	if client.credentialCache != nil {
 		client.credentialCache.mu.Lock()
 		client.credentialCache.credentials = creds
@@ -321,9 +334,12 @@ func (ak *AkashClient) getNodeClient() (akashclient.Client, error) {
 
 	kr := keyring.NewInMemory(cdc)
 
-	fmt.Println(string(creds))
+	passphrase := ""
+	if len(ak.Config.Passphrase) > 0 {
+		passphrase = string(ak.Config.Passphrase)
+	}
 
-	err = kr.ImportPrivKey(ak.Config.KeyName, string(creds), "")
+	err = kr.ImportPrivKey(ak.Config.KeyName, string(creds), passphrase)
 	if err != nil {
 		return nil, fmt.Errorf("failed to import private key: %w", err)
 	}

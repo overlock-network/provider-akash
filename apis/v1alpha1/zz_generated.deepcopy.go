@@ -152,6 +152,11 @@ func (in *ProviderConfigList) DeepCopyObject() runtime.Object {
 func (in *ProviderConfigSpec) DeepCopyInto(out *ProviderConfigSpec) {
 	*out = *in
 	in.Credentials.DeepCopyInto(&out.Credentials)
+	if in.Passphrase != nil {
+		in, out := &in.Passphrase, &out.Passphrase
+		*out = new(ProviderCredentials)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.Configuration != nil {
 		in, out := &in.Configuration, &out.Configuration
 		*out = new(AkashConfiguration)

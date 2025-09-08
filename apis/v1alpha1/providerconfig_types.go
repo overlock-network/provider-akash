@@ -30,6 +30,10 @@ type ProviderConfigSpec struct {
 	// Credentials required to authenticate to this provider.
 	Credentials ProviderCredentials `json:"credentials"`
 
+	// Passphrase for decrypting encrypted private keys.
+	// +optional
+	Passphrase *ProviderCredentials `json:"passphrase,omitempty"`
+
 	// Configuration contains Akash-specific configuration settings.
 	// +optional
 	Configuration *AkashConfiguration `json:"configuration,omitempty"`

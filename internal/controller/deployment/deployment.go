@@ -116,6 +116,12 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 		Configuration:       pc.Spec.Configuration,
 	}
 
+	// Add passphrase info if configured
+	if pc.Spec.Passphrase != nil {
+		pcInfo.PassphraseSource = &pc.Spec.Passphrase.Source
+		pcInfo.PassphraseSelectors = &pc.Spec.Passphrase.CommonCredentialSelectors
+	}
+
 	// Create service with AkashClient - this handles everything internally
 	svc, err := c.createDeploymentServiceFn(ctx, c.kubeClient, c.usage, mg, pcInfo)
 	if err != nil {
