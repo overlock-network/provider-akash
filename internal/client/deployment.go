@@ -5,9 +5,9 @@ import (
 	"strconv"
 
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
-	deploymenttypes "pkg.akt.dev/go/node/deployment/v1beta4"
-	deploymentv1 "pkg.akt.dev/go/node/deployment/v1"
 	clienttypes "github.com/overlock-network/provider-akash/internal/client/types"
+	deploymentv1 "pkg.akt.dev/go/node/deployment/v1"
+	deploymenttypes "pkg.akt.dev/go/node/deployment/v1beta4"
 )
 
 type Seqs struct {
@@ -15,7 +15,6 @@ type Seqs struct {
 	Gseq string
 	Oseq string
 }
-
 
 func (ak *AkashClient) GetDeployments(owner string) ([]clienttypes.DeploymentId, error) {
 	client, err := ak.getNodeClient()
@@ -25,7 +24,7 @@ func (ak *AkashClient) GetDeployments(owner string) ([]clienttypes.DeploymentId,
 
 	queryClient := client.Query()
 	deploymentQuery := queryClient.Deployment()
-	
+
 	deploymentsResp, err := deploymentQuery.Deployments(ak.ctx, &deploymenttypes.QueryDeploymentsRequest{
 		Filters: deploymenttypes.DeploymentFilters{
 			Owner: owner,
@@ -64,7 +63,7 @@ func (ak *AkashClient) GetDeployment(dseq string, owner string) (clienttypes.Dep
 
 	queryClient := client.Query()
 	deploymentQuery := queryClient.Deployment()
-	
+
 	deploymentResp, err := deploymentQuery.Deployment(ak.ctx, &deploymenttypes.QueryDeploymentRequest{
 		ID: deploymentID,
 	})
@@ -93,7 +92,7 @@ func (ak *AkashClient) GetDeployment(dseq string, owner string) (clienttypes.Dep
 
 func (ak *AkashClient) CreateDeployment(manifestLocation string) (Seqs, error) {
 	fmt.Println("Creating deployment with akash node client")
-	
+
 	client, err := ak.getNodeClient()
 	if err != nil {
 		fmt.Printf("Would create deployment from manifest: %s\n", manifestLocation)
@@ -105,15 +104,15 @@ func (ak *AkashClient) CreateDeployment(manifestLocation string) (Seqs, error) {
 	}
 
 	groups := []deploymenttypes.GroupSpec{}
-	
+
 	msg := &deploymenttypes.MsgCreateDeployment{
 		ID: deploymentv1.DeploymentID{
 			Owner: ak.Config.AccountAddress,
 			DSeq:  0,
 		},
-		Groups:   groups,
-		Hash:     []byte("1.0"),
-		Deposit:  sdktypes.NewInt64Coin("uakt", 5000000),
+		Groups:    groups,
+		Hash:      []byte("1.0"),
+		Deposit:   sdktypes.NewInt64Coin("uakt", 5000000),
 		Depositor: ak.Config.AccountAddress,
 	}
 
@@ -124,7 +123,7 @@ func (ak *AkashClient) CreateDeployment(manifestLocation string) (Seqs, error) {
 	}
 
 	fmt.Printf("Transaction response: %+v\n", resp)
-	
+
 	return Seqs{
 		Dseq: "12345",
 		Gseq: "1",

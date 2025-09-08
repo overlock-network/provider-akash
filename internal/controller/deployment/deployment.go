@@ -154,7 +154,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	if externalName != nil {
 		dseq = externalName["crossplane.io/external-name"]
 	}
-	
+
 	// If no external name is set, this resource hasn't been created yet
 	if dseq == "" {
 		fmt.Printf("No external-name annotation found, deployment not yet created\n")
@@ -171,7 +171,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	// 3. An annotation
 	// Using the client's account address as the owner for now
 	owner := c.service.client.Config.AccountAddress
-	
+
 	fmt.Printf("Querying deployment with DSEQ: %s, Owner: %s\n", dseq, owner)
 	deployment, err := c.service.client.GetDeployment(dseq, owner)
 	if err != nil {
@@ -184,10 +184,10 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}
 
 	fmt.Printf("Found deployment: %+v\n", deployment)
-	
+
 	// Update the observed status with deployment information
 	cr.Status.AtProvider.ObservableField = deployment.DeploymentInfo.State
-	
+
 	return managed.ExternalObservation{
 		ResourceExists:   true,
 		ResourceUpToDate: true, // For now, assume up to date - can add more logic later
@@ -206,20 +206,20 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	}
 
 	fmt.Printf("Creating: %+v", cr)
-	
+
 	// Get manifest location from the deployment parameter
 	manifestLocation := cr.Spec.ForProvider.Deployment
 	if manifestLocation == "" {
 		manifestLocation = "test" // fallback for now
 	}
-	
+
 	seqs, err := c.service.client.CreateDeployment(manifestLocation)
 	if err != nil {
 		return managed.ExternalCreation{}, err
 	}
-	
+
 	fmt.Printf("Created deployment with DSEQ: %s\n", seqs.Dseq)
-	
+
 	// Set the external name annotation so Observe can find this deployment
 	if cr.GetAnnotations() == nil {
 		cr.SetAnnotations(make(map[string]string))
@@ -227,12 +227,12 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	annotations := cr.GetAnnotations()
 	annotations["crossplane.io/external-name"] = seqs.Dseq
 	cr.SetAnnotations(annotations)
-	
+
 	return managed.ExternalCreation{
 		ConnectionDetails: managed.ConnectionDetails{
-			"dseq": []byte(seqs.Dseq),
-			"gseq": []byte(seqs.Gseq), 
-			"oseq": []byte(seqs.Oseq),
+			"dseq":  []byte(seqs.Dseq),
+			"gseq":  []byte(seqs.Gseq),
+			"oseq":  []byte(seqs.Oseq),
 			"owner": []byte(c.service.client.Config.AccountAddress),
 		},
 	}, nil
@@ -252,17 +252,17 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	if externalName != nil {
 		dseq = externalName["crossplane.io/external-name"]
 	}
-	
+
 	if dseq == "" {
 		return managed.ExternalUpdate{}, errors.New("cannot update deployment: no external-name annotation found")
 	}
-	
+
 	// Get manifest location from the deployment parameter
 	manifestLocation := cr.Spec.ForProvider.Deployment
 	if manifestLocation == "" {
 		manifestLocation = "test" // fallback for now
 	}
-	
+
 	fmt.Printf("Updating deployment %s with manifest: %s\n", dseq, manifestLocation)
 	err := c.service.client.UpdateDeployment(dseq, manifestLocation)
 	if err != nil {
@@ -271,7 +271,7 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 
 	return managed.ExternalUpdate{
 		ConnectionDetails: managed.ConnectionDetails{
-			"dseq": []byte(dseq),
+			"dseq":  []byte(dseq),
 			"owner": []byte(c.service.client.Config.AccountAddress),
 		},
 	}, nil
@@ -291,23 +291,23 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 	if externalName != nil {
 		dseq = externalName["crossplane.io/external-name"]
 	}
-	
+
 	// If no external name, deployment was never created or already deleted
 	if dseq == "" {
 		fmt.Printf("No external-name found, deployment already deleted or never created\n")
 		return nil
 	}
-	
+
 	// Use the account address from the client as the owner
 	owner := c.service.client.Config.AccountAddress
-	
+
 	fmt.Printf("Deleting deployment with DSEQ: %s, Owner: %s\n", dseq, owner)
 	err := c.service.client.DeleteDeployment(dseq, owner)
 	if err != nil {
 		fmt.Printf("Error deleting deployment: %v\n", err)
 		return err
 	}
-	
+
 	fmt.Printf("Successfully deleted deployment %s\n", dseq)
 	return nil
 }
