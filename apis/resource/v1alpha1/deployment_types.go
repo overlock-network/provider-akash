@@ -25,15 +25,63 @@ import (
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 )
 
+const (
+	// Deployment constants
+	MinimumDepositAmount = 500000  // Minimum deposit: 0.5 AKT in uakt
+	DefaultDepositAmount = 5000000 // Default deposit: 5 AKT in uakt  
+	DefaultCurrency      = "uakt"  // Default Akash token denomination
+	AlternateCurrency    = "akt"   // Alternate Akash token denomination
+)
+
 // DeploymentParameters are the configurable fields of a Deployment.
 type DeploymentParameters struct {
-	Deployment string `json:"deployment,omitempty"`
+	// SDL contains the Akash Stack Definition Language (SDL) deployment manifest as YAML string
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=10
+	// +kubebuilder:validation:MaxLength=1048576
+	SDL string `json:"sdl"`
+
+	// Deposit is the deployment deposit amount in uakt (minimum 500000, default 5000000)
+	// +kubebuilder:validation:Minimum=500000
+	// +kubebuilder:validation:Maximum=1000000000000
+	// +kubebuilder:default=5000000
+	Deposit *int64 `json:"deposit,omitempty"`
+
+	// Currency is the token denomination (default "uakt")
+	// +kubebuilder:validation:Enum=uakt;akt
+	// +kubebuilder:default="uakt"
+	Currency *string `json:"currency,omitempty"`
 }
+
 
 // DeploymentObservation are the observable fields of a Deployment.
 type DeploymentObservation struct {
-	ObservableField string `json:"observableField,omitempty"`
+	// DeploymentId is the deployment sequence number assigned by Akash
+	DeploymentId string `json:"deploymentId,omitempty"`
+
+	// Owner is the deployment owner address from ProviderConfig
+	Owner string `json:"owner,omitempty"`
+
+	// State is the current deployment state from Akash network
+	State string `json:"state,omitempty"`
+
+	// CreatedHeight is the block height when deployment was created
+	CreatedHeight int64 `json:"createdHeight,omitempty"`
+
+	// EscrowBalance is the current escrow account balance
+	EscrowBalance *BalanceStatus `json:"escrowBalance,omitempty"`
+
+	// Version is the deployment version
+	Version string `json:"version,omitempty"`
 }
+
+
+// BalanceStatus represents balance information
+type BalanceStatus struct {
+	Denom  string `json:"denom,omitempty"`
+	Amount string `json:"amount,omitempty"`
+}
+
 
 // A DeploymentSpec defines the desired state of a Deployment.
 type DeploymentSpec struct {
@@ -49,10 +97,12 @@ type DeploymentStatus struct {
 
 // +kubebuilder:object:root=true
 
-// A Deployment is an example API type.
+// A Deployment represents an Akash Network deployment resource.
 // +kubebuilder:printcolumn:name="READY",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 // +kubebuilder:printcolumn:name="SYNCED",type="string",JSONPath=".status.conditions[?(@.type=='Synced')].status"
-// +kubebuilder:printcolumn:name="EXTERNAL-NAME",type="string",JSONPath=".metadata.annotations.crossplane\\.io/external-name"
+// +kubebuilder:printcolumn:name="DSEQ",type="string",JSONPath=".status.atProvider.deploymentId"
+// +kubebuilder:printcolumn:name="STATE",type="string",JSONPath=".status.atProvider.state"
+// +kubebuilder:printcolumn:name="OWNER",type="string",JSONPath=".status.atProvider.owner"
 // +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster,categories={crossplane,managed,akash}

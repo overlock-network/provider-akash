@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.14.0
-  name: deployments.resource.akash.web7.md
+  name: deployments.akash.overlock.network
 spec:
-  group: resource.akash.web7.md
+  group: akash.overlock.network
   names:
     categories:
     - crossplane
@@ -25,8 +25,14 @@ spec:
     - jsonPath: .status.conditions[?(@.type=='Synced')].status
       name: SYNCED
       type: string
-    - jsonPath: .metadata.annotations.crossplane\.io/external-name
-      name: EXTERNAL-NAME
+    - jsonPath: .status.atProvider.deploymentId
+      name: DSEQ
+      type: string
+    - jsonPath: .status.atProvider.state
+      name: STATE
+      type: string
+    - jsonPath: .status.atProvider.owner
+      name: OWNER
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: AGE
@@ -34,7 +40,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: A Deployment is an example API type.
+        description: A Deployment represents an Akash Network deployment resource.
         properties:
           apiVersion:
             description: |-
@@ -74,8 +80,29 @@ spec:
                 description: DeploymentParameters are the configurable fields of a
                   Deployment.
                 properties:
-                  deployment:
+                  currency:
+                    default: uakt
+                    description: Currency is the token denomination (default "uakt")
+                    enum:
+                    - uakt
+                    - akt
                     type: string
+                  deposit:
+                    default: 5000000
+                    description: Deposit is the deployment deposit amount in uakt
+                      (minimum 500000, default 5000000)
+                    format: int64
+                    maximum: 1000000000000
+                    minimum: 500000
+                    type: integer
+                  sdl:
+                    description: SDL contains the Akash Stack Definition Language
+                      (SDL) deployment manifest as YAML string
+                    maxLength: 1048576
+                    minLength: 10
+                    type: string
+                required:
+                - sdl
                 type: object
               managementPolicies:
                 default:
@@ -251,7 +278,32 @@ spec:
                 description: DeploymentObservation are the observable fields of a
                   Deployment.
                 properties:
-                  observableField:
+                  createdHeight:
+                    description: CreatedHeight is the block height when deployment
+                      was created
+                    format: int64
+                    type: integer
+                  deploymentId:
+                    description: DeploymentId is the deployment sequence number assigned
+                      by Akash
+                    type: string
+                  escrowBalance:
+                    description: EscrowBalance is the current escrow account balance
+                    properties:
+                      amount:
+                        type: string
+                      denom:
+                        type: string
+                    type: object
+                  owner:
+                    description: Owner is the deployment owner address from ProviderConfig
+                    type: string
+                  state:
+                    description: State is the current deployment state from Akash
+                      network
+                    type: string
+                  version:
+                    description: Version is the deployment version
                     type: string
                 type: object
               conditions:
