@@ -2,9 +2,10 @@ package client
 
 import (
 	"github.com/overlock-network/provider-akash/internal/client/cli"
+	clienttypes "github.com/overlock-network/provider-akash/internal/client/types"
 )
 
-func (ak *AkashClient) CreateLease(seqs Seqs, provider string) (string, error) {
+func (ak *AkashClient) CreateLease(seqs clienttypes.Seqs, provider string) (string, error) {
 	cmd := cli.AkashCli(ak).Tx().Market().Lease().Create().
 		SetDseq(seqs.Dseq).SetGseq(seqs.Gseq).SetOseq(seqs.Oseq).
 		SetProvider(provider).SetOwner(ak.Config.AccountAddress).SetFrom(ak.Config.KeyName).

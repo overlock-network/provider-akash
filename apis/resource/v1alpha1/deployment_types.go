@@ -25,6 +25,14 @@ import (
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 )
 
+const (
+	// Deployment constants
+	MinimumDepositAmount = 500000  // Minimum deposit: 0.5 AKT in uakt
+	DefaultDepositAmount = 5000000 // Default deposit: 5 AKT in uakt  
+	DefaultCurrency      = "uakt"  // Default Akash token denomination
+	AlternateCurrency    = "akt"   // Alternate Akash token denomination
+)
+
 // DeploymentParameters are the configurable fields of a Deployment.
 type DeploymentParameters struct {
 	// SDL contains the Akash Stack Definition Language (SDL) deployment manifest as YAML string

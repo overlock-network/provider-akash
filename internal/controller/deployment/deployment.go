@@ -18,7 +18,9 @@ package deployment
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -39,6 +41,7 @@ import (
 	"github.com/overlock-network/provider-akash/apis/resource/v1alpha1"
 	apisv1alpha1 "github.com/overlock-network/provider-akash/apis/v1alpha1"
 	client "github.com/overlock-network/provider-akash/internal/client"
+	clienttypes "github.com/overlock-network/provider-akash/internal/client/types"
 	"github.com/overlock-network/provider-akash/internal/features"
 )
 
@@ -57,6 +60,10 @@ const (
 	errCreateDeployment  = "failed to create deployment"
 	errUpdateDeployment  = "failed to update deployment"
 	errDeleteDeployment  = "failed to delete deployment"
+
+	// Deployment operation constants
+	balanceTolerance    = int64(100000) // 0.1 AKT tolerance for balance comparison
+	tolerancePercentage = 10            // 10% tolerance for larger deposits
 )
 
 type DeploymentService struct {
@@ -208,8 +215,13 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		}
 	}
 
-	// Set version from deployment hash or use a default
-	cr.Status.AtProvider.Version = "1.0"
+	// Extract actual version/creation info from deployment response
+	if deployment.DeploymentInfo.CreatedAt > 0 {
+		cr.Status.AtProvider.Version = fmt.Sprintf("block-%d", deployment.DeploymentInfo.CreatedAt)
+	} else {
+		// Fallback: use current time if creation block height not available
+		cr.Status.AtProvider.Version = ""
+	}
 
 	// Set Ready condition based on deployment state
 	setReadyCondition(cr, deployment.DeploymentInfo.State)
@@ -217,9 +229,57 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	// Set Synced condition to indicate successful observation
 	setStatusCondition(cr, xpv1.TypeSynced, corev1.ConditionTrue, xpv1.ReasonReconcileSuccess, "Successfully observed deployment")
 
-	// Determine if the resource is up to date by comparing SDL content
-	// For now, we'll assume it's up to date unless we detect differences
-	isUpToDate := true
+	// Determine if the resource is up to date by comparing deployment properties
+	isUpToDate := true // Start optimistic
+
+	// Basic checks - if deployment is in an error state, consider it not up to date
+	if deployment.DeploymentInfo.State == "paused" || deployment.DeploymentInfo.State == "insufficient_funds" {
+		isUpToDate = false
+	}
+
+	// Compare escrow balance with desired deposit amount
+	if cr.Spec.ForProvider.Deposit != nil {
+		desiredDeposit := *cr.Spec.ForProvider.Deposit
+		if deployment.EscrowAccount.Balance.Amount != "" {
+			// Parse current balance string to int64
+			currentBalance, err := strconv.ParseInt(deployment.EscrowAccount.Balance.Amount, 10, 64)
+			if err != nil {
+				// If we can't parse the balance, consider it not up to date
+				isUpToDate = false
+			} else {
+				// Allow some tolerance (e.g., within 10% or 100000 uakt minimum)
+				tolerance := balanceTolerance
+				if desiredDeposit > tolerance {
+					tolerance = desiredDeposit / tolerancePercentage
+				}
+
+				if currentBalance < (desiredDeposit - tolerance) {
+					// Current balance is significantly less than desired
+					isUpToDate = false
+				}
+			}
+		}
+	}
+
+	// Compare desired currency with actual escrow denomination
+	if cr.Spec.ForProvider.Currency != nil {
+		desiredCurrency := *cr.Spec.ForProvider.Currency
+		if deployment.EscrowAccount.Balance.Denom != desiredCurrency {
+			isUpToDate = false
+		}
+	}
+
+	// Compare actual deployment SDL hash with desired spec SDL
+	if cr.Spec.ForProvider.SDL != "" && deployment.DeploymentInfo.Hash != "" {
+		// Generate hash from current SDL spec
+		desiredHash := generateSDLHashHex(cr.Spec.ForProvider.SDL)
+
+		// Compare with deployed hash
+		if deployment.DeploymentInfo.Hash != desiredHash {
+			fmt.Printf("SDL hash mismatch: desired=%s, actual=%s\n", desiredHash, deployment.DeploymentInfo.Hash)
+			isUpToDate = false
+		}
+	}
 
 	// Check if deployment state indicates it needs attention
 	if deployment.DeploymentInfo.State == "closed" {
@@ -259,12 +319,12 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	}
 
 	// Get deposit and currency from spec with defaults
-	deposit := int64(5000000) // Default 5 AKT
+	deposit := int64(v1alpha1.DefaultDepositAmount)
 	if cr.Spec.ForProvider.Deposit != nil {
 		deposit = *cr.Spec.ForProvider.Deposit
 	}
 
-	currency := "uakt" // Default
+	currency := v1alpha1.DefaultCurrency
 	if cr.Spec.ForProvider.Currency != nil {
 		currency = *cr.Spec.ForProvider.Currency
 	}
@@ -272,7 +332,12 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	fmt.Printf("Creating deployment with SDL length: %d, deposit: %d %s\n", len(sdlContent), deposit, currency)
 
 	// Create the deployment using the client
-	seqs, err := c.service.client.CreateDeployment(ctx, sdlContent, deposit, currency)
+	req := clienttypes.DeploymentCreateRequest{
+		SDL:      sdlContent,
+		Deposit:  deposit,
+		Currency: currency,
+	}
+	seqs, err := c.service.client.CreateDeployment(ctx, req)
 	if err != nil {
 		return managed.ExternalCreation{}, errors.Wrap(err, errCreateDeployment)
 	}
@@ -432,4 +497,14 @@ func setReadyCondition(cr *v1alpha1.Deployment, state string) {
 	default:
 		setStatusCondition(cr, xpv1.TypeReady, corev1.ConditionUnknown, xpv1.ReasonCreating, fmt.Sprintf("Deployment state: %s", state))
 	}
+}
+
+// generateSDLHashHex creates a consistent hex hash from SDL content
+func generateSDLHashHex(sdl string) string {
+	// Normalize SDL content by removing extra whitespace and ensuring consistent formatting
+	normalizedSDL := strings.TrimSpace(sdl)
+
+	// Create SHA256 hash of the normalized SDL content
+	hash := sha256.Sum256([]byte(normalizedSDL))
+	return fmt.Sprintf("%x", hash[:])
 }

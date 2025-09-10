@@ -8,6 +8,8 @@ type DeploymentId struct {
 type DeploymentInfo struct {
 	State        string       `json:"state"`
 	DeploymentId DeploymentId `json:"deployment_id"`
+	Hash         string       `json:"hash,omitempty"`       // SDL hash from deployment
+	CreatedAt    int64        `json:"created_at,omitempty"` // Block height when deployment was created
 }
 
 type EscrowAccountBalance struct {
@@ -28,4 +30,10 @@ type Deployment struct {
 
 type DeploymentResponse struct {
 	Deployments []Deployment `json:"deployments"`
+}
+
+type DeploymentCreateRequest struct {
+	SDL      string `json:"sdl"`
+	Deposit  int64  `json:"deposit"`
+	Currency string `json:"currency"`
 }
