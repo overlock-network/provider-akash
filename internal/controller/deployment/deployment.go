@@ -19,12 +19,16 @@ package deployment
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	kubeclient "sigs.k8s.io/controller-runtime/pkg/client"
 
+	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/crossplane/crossplane-runtime/pkg/connection"
 	"github.com/crossplane/crossplane-runtime/pkg/controller"
 	"github.com/crossplane/crossplane-runtime/pkg/event"
@@ -43,8 +47,16 @@ const (
 	errTrackPCUsage  = "cannot track ProviderConfig usage"
 	errGetPC         = "cannot get ProviderConfig"
 	errGetCreds      = "cannot get credentials"
+	errNewClient     = "cannot create new Service"
 
-	errNewClient = "cannot create new Service"
+	// Deployment-specific errors
+	errSDLRequired       = "SDL content is required"
+	errNoExternalName    = "no external-name annotation found"
+	errNoOwnerAddress    = "owner address not configured in provider"
+	errObserveDeployment = "failed to observe deployment"
+	errCreateDeployment  = "failed to create deployment"
+	errUpdateDeployment  = "failed to update deployment"
+	errDeleteDeployment  = "failed to delete deployment"
 )
 
 type DeploymentService struct {
@@ -139,16 +151,16 @@ type external struct {
 	service *DeploymentService
 }
 
+// Observe queries the current state of the deployment from the Akash network
 func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
 	cr, ok := mg.(*v1alpha1.Deployment)
 	if !ok {
 		return managed.ExternalObservation{}, errors.New(errNotDeployment)
 	}
 
-	fmt.Printf("Observing: %+v", cr)
+	fmt.Printf("Observing deployment: %s\n", cr.Name)
 
-	// Extract deployment identification from the managed resource
-	// In Crossplane, the external-name annotation typically contains the external resource ID
+	// Extract deployment ID from the external-name annotation
 	externalName := cr.GetAnnotations()
 	var dseq string
 	if externalName != nil {
@@ -164,16 +176,14 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		}, nil
 	}
 
-	// Extract owner from the managed resource spec or use a default
-	// For now, we'll need to determine how to get the owner - this might come from:
-	// 1. The ProviderConfig account address
-	// 2. A parameter in the DeploymentSpec
-	// 3. An annotation
-	// Using the client's account address as the owner for now
+	// Use the account address from the client configuration as the owner
 	owner := c.service.client.Config.AccountAddress
+	if owner == "" {
+		return managed.ExternalObservation{}, errors.New(errNoOwnerAddress)
+	}
 
 	fmt.Printf("Querying deployment with DSEQ: %s, Owner: %s\n", dseq, owner)
-	deployment, err := c.service.client.GetDeployment(dseq, owner)
+	deployment, err := c.service.client.GetDeployment(ctx, dseq, owner)
 	if err != nil {
 		fmt.Printf("Error querying deployment: %v\n", err)
 		// If deployment doesn't exist on Akash network, mark as not existing
@@ -183,44 +193,97 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		}, nil
 	}
 
-	fmt.Printf("Found deployment: %+v\n", deployment)
+	fmt.Printf("Found deployment: State=%s, DSEQ=%s\n", deployment.DeploymentInfo.State, deployment.DeploymentInfo.DeploymentId.Dseq)
 
 	// Update the observed status with deployment information
-	cr.Status.AtProvider.ObservableField = deployment.DeploymentInfo.State
+	cr.Status.AtProvider.DeploymentId = deployment.DeploymentInfo.DeploymentId.Dseq
+	cr.Status.AtProvider.State = deployment.DeploymentInfo.State
+	cr.Status.AtProvider.Owner = deployment.DeploymentInfo.DeploymentId.Owner
+
+	// Update escrow balance information if available
+	if deployment.EscrowAccount.Balance.Denom != "" {
+		cr.Status.AtProvider.EscrowBalance = &v1alpha1.BalanceStatus{
+			Denom:  deployment.EscrowAccount.Balance.Denom,
+			Amount: deployment.EscrowAccount.Balance.Amount,
+		}
+	}
+
+	// Set version from deployment hash or use a default
+	cr.Status.AtProvider.Version = "1.0"
+
+	// Set Ready condition based on deployment state
+	setReadyCondition(cr, deployment.DeploymentInfo.State)
+
+	// Set Synced condition to indicate successful observation
+	setStatusCondition(cr, xpv1.TypeSynced, corev1.ConditionTrue, xpv1.ReasonReconcileSuccess, "Successfully observed deployment")
+
+	// Determine if the resource is up to date by comparing SDL content
+	// For now, we'll assume it's up to date unless we detect differences
+	isUpToDate := true
+
+	// Check if deployment state indicates it needs attention
+	if deployment.DeploymentInfo.State == "closed" {
+		// Deployment is closed, mark as not existing
+		setStatusCondition(cr, xpv1.TypeSynced, corev1.ConditionFalse, xpv1.ReasonDeleting, "Deployment is closed")
+		return managed.ExternalObservation{
+			ResourceExists:   false,
+			ResourceUpToDate: false,
+		}, nil
+	}
 
 	return managed.ExternalObservation{
 		ResourceExists:   true,
-		ResourceUpToDate: true, // For now, assume up to date - can add more logic later
+		ResourceUpToDate: isUpToDate,
 		ConnectionDetails: managed.ConnectionDetails{
-			"dseq":  []byte(deployment.DeploymentInfo.DeploymentId.Dseq),
-			"owner": []byte(deployment.DeploymentInfo.DeploymentId.Owner),
-			"state": []byte(deployment.DeploymentInfo.State),
+			"deploymentId":  []byte(deployment.DeploymentInfo.DeploymentId.Dseq),
+			"owner":         []byte(deployment.DeploymentInfo.DeploymentId.Owner),
+			"state":         []byte(deployment.DeploymentInfo.State),
+			"escrowBalance": []byte(deployment.EscrowAccount.Balance.Amount + deployment.EscrowAccount.Balance.Denom),
 		},
 	}, nil
 }
 
+// Create creates a new deployment on the Akash network using the CreateDeployment client method
 func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
 	cr, ok := mg.(*v1alpha1.Deployment)
 	if !ok {
 		return managed.ExternalCreation{}, errors.New(errNotDeployment)
 	}
 
-	fmt.Printf("Creating: %+v", cr)
+	fmt.Printf("Creating deployment: %s\n", cr.Name)
 
-	// Get manifest location from the deployment parameter
-	manifestLocation := cr.Spec.ForProvider.Deployment
-	if manifestLocation == "" {
-		manifestLocation = "test" // fallback for now
+	// Validate SDL content is provided
+	sdlContent := cr.Spec.ForProvider.SDL
+	if sdlContent == "" {
+		return managed.ExternalCreation{}, errors.New(errSDLRequired)
 	}
 
-	seqs, err := c.service.client.CreateDeployment(manifestLocation)
+	// Get deposit and currency from spec with defaults
+	deposit := int64(5000000) // Default 5 AKT
+	if cr.Spec.ForProvider.Deposit != nil {
+		deposit = *cr.Spec.ForProvider.Deposit
+	}
+
+	currency := "uakt" // Default
+	if cr.Spec.ForProvider.Currency != nil {
+		currency = *cr.Spec.ForProvider.Currency
+	}
+
+	fmt.Printf("Creating deployment with SDL length: %d, deposit: %d %s\n", len(sdlContent), deposit, currency)
+
+	// Create the deployment using the client
+	seqs, err := c.service.client.CreateDeployment(ctx, sdlContent, deposit, currency)
 	if err != nil {
-		return managed.ExternalCreation{}, err
+		return managed.ExternalCreation{}, errors.Wrap(err, errCreateDeployment)
 	}
 
-	fmt.Printf("Created deployment with DSEQ: %s\n", seqs.Dseq)
+	fmt.Printf("Successfully created deployment with DSEQ: %s\n", seqs.Dseq)
 
-	// Set the external name annotation so Observe can find this deployment
+	// Set status conditions for successful creation
+	setStatusCondition(cr, xpv1.TypeSynced, corev1.ConditionTrue, xpv1.ReasonReconcileSuccess, "Deployment created successfully")
+	setStatusCondition(cr, xpv1.TypeReady, corev1.ConditionUnknown, xpv1.ReasonCreating, "Deployment is being initialized")
+
+	// Set the external-name annotation for future operations
 	if cr.GetAnnotations() == nil {
 		cr.SetAnnotations(make(map[string]string))
 	}
@@ -228,23 +291,28 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	annotations["crossplane.io/external-name"] = seqs.Dseq
 	cr.SetAnnotations(annotations)
 
+	// Return connection details for the created deployment
 	return managed.ExternalCreation{
 		ConnectionDetails: managed.ConnectionDetails{
-			"dseq":  []byte(seqs.Dseq),
-			"gseq":  []byte(seqs.Gseq),
-			"oseq":  []byte(seqs.Oseq),
-			"owner": []byte(c.service.client.Config.AccountAddress),
+			"deploymentId": []byte(seqs.Dseq),
+			"dseq":         []byte(seqs.Dseq),
+			"gseq":         []byte(seqs.Gseq),
+			"oseq":         []byte(seqs.Oseq),
+			"owner":        []byte(c.service.client.Config.AccountAddress),
+			"deposit":      []byte(fmt.Sprintf("%d", deposit)),
+			"currency":     []byte(currency),
 		},
 	}, nil
 }
 
+// Update updates an existing deployment on the Akash network using the UpdateDeployment client method
 func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.ExternalUpdate, error) {
 	cr, ok := mg.(*v1alpha1.Deployment)
 	if !ok {
 		return managed.ExternalUpdate{}, errors.New(errNotDeployment)
 	}
 
-	fmt.Printf("Updating: %+v", cr)
+	fmt.Printf("Updating deployment: %s\n", cr.Name)
 
 	// Extract deployment ID from external-name annotation
 	externalName := cr.GetAnnotations()
@@ -254,36 +322,44 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	}
 
 	if dseq == "" {
-		return managed.ExternalUpdate{}, errors.New("cannot update deployment: no external-name annotation found")
+		return managed.ExternalUpdate{}, errors.New(errNoExternalName)
 	}
 
-	// Get manifest location from the deployment parameter
-	manifestLocation := cr.Spec.ForProvider.Deployment
-	if manifestLocation == "" {
-		manifestLocation = "test" // fallback for now
+	// Validate SDL content is provided
+	sdlContent := cr.Spec.ForProvider.SDL
+	if sdlContent == "" {
+		return managed.ExternalUpdate{}, errors.New(errSDLRequired)
 	}
 
-	fmt.Printf("Updating deployment %s with manifest: %s\n", dseq, manifestLocation)
-	err := c.service.client.UpdateDeployment(dseq, manifestLocation)
+	fmt.Printf("Updating deployment %s with SDL content (length: %d)\n", dseq, len(sdlContent))
+
+	// Update the deployment using the client
+	err := c.service.client.UpdateDeployment(ctx, dseq, sdlContent)
 	if err != nil {
-		return managed.ExternalUpdate{}, err
+		return managed.ExternalUpdate{}, errors.Wrap(err, errUpdateDeployment)
 	}
 
+	fmt.Printf("Successfully updated deployment %s\n", dseq)
+
+	// Return updated connection details
 	return managed.ExternalUpdate{
 		ConnectionDetails: managed.ConnectionDetails{
-			"dseq":  []byte(dseq),
-			"owner": []byte(c.service.client.Config.AccountAddress),
+			"deploymentId": []byte(dseq),
+			"dseq":         []byte(dseq),
+			"owner":        []byte(c.service.client.Config.AccountAddress),
+			"lastUpdated":  []byte(fmt.Sprintf("%d", ctx.Value("timestamp"))),
 		},
 	}, nil
 }
 
+// Delete closes/terminates a deployment on the Akash network using the CloseDeployment client method
 func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 	cr, ok := mg.(*v1alpha1.Deployment)
 	if !ok {
 		return errors.New(errNotDeployment)
 	}
 
-	fmt.Printf("Deleting: %+v", cr)
+	fmt.Printf("Deleting deployment: %s\n", cr.Name)
 
 	// Extract deployment ID from external-name annotation
 	externalName := cr.GetAnnotations()
@@ -298,16 +374,62 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 		return nil
 	}
 
-	// Use the account address from the client as the owner
+	// Use the account address from the client configuration as the owner
 	owner := c.service.client.Config.AccountAddress
-
-	fmt.Printf("Deleting deployment with DSEQ: %s, Owner: %s\n", dseq, owner)
-	err := c.service.client.DeleteDeployment(dseq, owner)
-	if err != nil {
-		fmt.Printf("Error deleting deployment: %v\n", err)
-		return err
+	if owner == "" {
+		return errors.New(errNoOwnerAddress)
 	}
 
-	fmt.Printf("Successfully deleted deployment %s\n", dseq)
+	fmt.Printf("Closing deployment with DSEQ: %s, Owner: %s\n", dseq, owner)
+
+	// Close the deployment using the client
+	err := c.service.client.CloseDeployment(ctx, dseq, owner)
+	if err != nil {
+		fmt.Printf("Error closing deployment: %v\n", err)
+		// Don't return error for already closed deployments to allow cleanup
+		if isDeploymentNotFoundError(err) {
+			fmt.Printf("Deployment %s not found, assuming already closed\n", dseq)
+			return nil
+		}
+		return errors.Wrap(err, errDeleteDeployment)
+	}
+
+	fmt.Printf("Successfully closed deployment %s\n", dseq)
 	return nil
+}
+
+// isDeploymentNotFoundError checks if the error indicates the deployment was not found
+func isDeploymentNotFoundError(err error) bool {
+	// This is a helper function to determine if the error indicates
+	// that the deployment doesn't exist (already closed/deleted)
+	// The exact error checking logic will depend on the Akash SDK error types
+	errorStr := err.Error()
+	return strings.Contains(errorStr, "not found") ||
+		strings.Contains(errorStr, "does not exist") ||
+		strings.Contains(errorStr, "deployment closed")
+}
+
+// setStatusCondition sets a condition on the deployment resource
+func setStatusCondition(cr *v1alpha1.Deployment, conditionType xpv1.ConditionType, status corev1.ConditionStatus, reason xpv1.ConditionReason, message string) {
+	cr.SetConditions(xpv1.Condition{
+		Type:               conditionType,
+		Status:             status,
+		LastTransitionTime: metav1.Now(),
+		Reason:             reason,
+		Message:            message,
+	})
+}
+
+// setReadyCondition sets the Ready condition based on deployment state
+func setReadyCondition(cr *v1alpha1.Deployment, state string) {
+	switch state {
+	case "active":
+		setStatusCondition(cr, xpv1.TypeReady, corev1.ConditionTrue, xpv1.ReasonAvailable, "Deployment is active and running")
+	case "paused":
+		setStatusCondition(cr, xpv1.TypeReady, corev1.ConditionFalse, xpv1.ReasonUnavailable, "Deployment is paused")
+	case "closed":
+		setStatusCondition(cr, xpv1.TypeReady, corev1.ConditionFalse, xpv1.ReasonDeleting, "Deployment is closed")
+	default:
+		setStatusCondition(cr, xpv1.TypeReady, corev1.ConditionUnknown, xpv1.ReasonCreating, fmt.Sprintf("Deployment state: %s", state))
+	}
 }

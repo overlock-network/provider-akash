@@ -1,23 +1,59 @@
-apiVersion: resource.akash.web7.md/v1alpha1
+apiVersion: akash.overlock.network/v1alpha1
 kind: Deployment
 metadata:
-  name: my-akash-deployment
+  name: nginx-deployment
 spec:
   providerConfigRef:
-    name: sandbox
+    name: default
   forProvider:
-    deployment: |
-      ---
+    # SDL (Stack Definition Language) for the Akash deployment
+    sdl: |
       version: "2.0"
-
+      
       services:
-        mysql:
-          image: mysql 
+        web:
+          image: nginx:latest
           expose:
-            - port: 3306 
-              to:
-                - global: true
-            - port: 8080
+            - port: 80
               as: 80
               to:
                 - global: true
+      
+      profiles:
+        compute:
+          web:
+            resources:
+              cpu:
+                units: 0.5
+              memory:
+                size: 512Mi
+              storage:
+                - size: 1Gi
+        placement:
+          akash:
+            attributes:
+              host: akash
+            signedBy:
+              anyOf:
+                - "akash1365yvmc4s7awdyj3n2sav7xfx76adc6dnmlx63"
+            pricing:
+              web: 
+                denom: uakt
+                amount: 100
+      
+      deployment:
+        web:
+          akash:
+            profile: web
+            count: 1
+
+    # Deployment deposit in uakt (5 AKT = 5,000,000 uakt)
+    deposit: 5000000
+    
+    # Token denomination
+    currency: uakt
+
+  # Connection secret for deployment details
+  writeConnectionSecretToRef:
+    name: nginx-deployment-connection
+    namespace: crossplane-system

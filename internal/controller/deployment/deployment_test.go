@@ -21,10 +21,14 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
+
+	"github.com/overlock-network/provider-akash/apis/resource/v1alpha1"
 )
 
 // Unlike many Kubernetes projects Crossplane does not use third party testing
@@ -56,7 +60,39 @@ func TestObserve(t *testing.T) {
 		args   args
 		want   want
 	}{
-		// TODO: Add test cases.
+		"NotDeployment": {
+			reason: "Should return error when managed resource is not a Deployment",
+			fields: fields{
+				service: &DeploymentService{},
+			},
+			args: args{
+				ctx: context.Background(),
+				mg:  nil,
+			},
+			want: want{
+				err: errors.New(errNotDeployment),
+			},
+		},
+		"NoExternalName": {
+			reason: "Should return ResourceExists=false when no external-name annotation",
+			fields: fields{
+				service: &DeploymentService{},
+			},
+			args: args{
+				ctx: context.Background(),
+				mg: &v1alpha1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-deployment",
+					},
+				},
+			},
+			want: want{
+				o: managed.ExternalObservation{
+					ResourceExists:   false,
+					ResourceUpToDate: false,
+				},
+			},
+		},
 	}
 
 	for name, tc := range cases {
