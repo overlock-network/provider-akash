@@ -20,14 +20,16 @@ package apis
 import (
 	"k8s.io/apimachinery/pkg/runtime"
 
+	akashv1alpha1 "github.com/overlock-network/provider-akash/apis/akash/v1alpha1"
 	resourcev1alpha1 "github.com/overlock-network/provider-akash/apis/resource/v1alpha1"
-	akashv1alpha1 "github.com/overlock-network/provider-akash/apis/v1alpha1"
+	apiakashv1alpha1 "github.com/overlock-network/provider-akash/apis/v1alpha1"
 )
 
 func init() {
 	// Register the types with the Scheme so the components can map objects to GroupVersionKinds and back
 	AddToSchemes = append(AddToSchemes,
 		akashv1alpha1.SchemeBuilder.AddToScheme,
+		apiakashv1alpha1.SchemeBuilder.AddToScheme,
 		resourcev1alpha1.SchemeBuilder.AddToScheme,
 	)
 }

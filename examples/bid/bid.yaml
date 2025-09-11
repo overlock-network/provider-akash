@@ -1,0 +1,26 @@
+apiVersion: akash.overlock.network/v1alpha1
+kind: Bid
+metadata:
+  name: example-bid
+spec:
+  providerConfigRef:
+    name: default
+  forProvider:
+    deploymentRef:
+      name: example-deployment
+      # namespace: default  # Optional - defaults to same namespace
+    autoAccept: true
+    maxPrice: 5000000  # Maximum 5 AKT in uakt
+---
+apiVersion: akash.overlock.network/v1alpha1
+kind: Bid
+metadata:
+  name: manual-bid-observer
+spec:
+  providerConfigRef:
+    name: default
+  forProvider:
+    deploymentRef:
+      name: example-deployment
+    autoAccept: false  # Just observe bids, don't auto-accept
+    maxPrice: 10000000  # Maximum 10 AKT in uakt
