@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package bid
+package activebid
 
 import (
 	"context"
@@ -45,7 +45,7 @@ import (
 )
 
 const (
-	errNotBid       = "managed resource is not a Bid custom resource"
+	errNotActiveBid = "managed resource is not an ActiveBid custom resource"
 	errTrackPCUsage = "cannot track ProviderConfig usage"
 	errGetPC        = "cannot get ProviderConfig"
 	errGetCreds     = "cannot get credentials"
@@ -76,7 +76,7 @@ var newBidService = func(ctx context.Context, kubeClient kubeclient.Client, usag
 
 // Setup adds a controller that reconciles Bid managed resources.
 func Setup(mgr ctrl.Manager, o controller.Options) error {
-	name := managed.ControllerName(akashv1alpha1.BidGroupKind)
+	name := managed.ControllerName(akashv1alpha1.ActiveBidGroupKind)
 
 	cps := []managed.ConnectionPublisher{managed.NewAPISecretPublisher(mgr.GetClient(), mgr.GetScheme())}
 	if o.Features.Enabled(features.EnableAlphaExternalSecretStores) {
@@ -84,7 +84,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 	}
 
 	r := managed.NewReconciler(mgr,
-		resource.ManagedKind(akashv1alpha1.BidGroupVersionKind),
+		resource.ManagedKind(akashv1alpha1.ActiveBidGroupVersionKind),
 		managed.WithExternalConnecter(&connector{
 			kubeClient:         mgr.GetClient(),
 			usage:              resource.NewProviderConfigUsageTracker(mgr.GetClient(), &apisv1alpha1.ProviderConfigUsage{}),
@@ -98,7 +98,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		Named(name).
 		WithOptions(o.ForControllerRuntime()).
 		WithEventFilter(resource.DesiredStateChanged()).
-		For(&akashv1alpha1.Bid{}).
+		For(&akashv1alpha1.ActiveBid{}).
 		Complete(ratelimiter.NewReconciler(name, r, o.GlobalRateLimiter))
 }
 
@@ -111,9 +111,9 @@ type connector struct {
 
 // Connect produces an ExternalClient with ready-to-use AkashClient
 func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.ExternalClient, error) {
-	cr, ok := mg.(*akashv1alpha1.Bid)
+	cr, ok := mg.(*akashv1alpha1.ActiveBid)
 	if !ok {
-		return nil, errors.New(errNotBid)
+		return nil, errors.New(errNotActiveBid)
 	}
 
 	// Get the ProviderConfig referenced by the managed resource
@@ -151,12 +151,12 @@ type external struct {
 
 // Observe queries the current state of bids for the referenced deployment
 func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
-	cr, ok := mg.(*akashv1alpha1.Bid)
+	cr, ok := mg.(*akashv1alpha1.ActiveBid)
 	if !ok {
-		return managed.ExternalObservation{}, errors.New(errNotBid)
+		return managed.ExternalObservation{}, errors.New(errNotActiveBid)
 	}
 
-	fmt.Printf("Observing bids for deployment reference: %s\n", cr.Spec.ForProvider.DeploymentRef.Name)
+	fmt.Printf("Observing ActiveBids for deployment reference: %s\n", cr.Spec.ForProvider.DeploymentRef.Name)
 
 	// Resolve the deployment reference to get DSEQ and owner
 	deployment, err := c.getReferencedDeployment(ctx, cr)
@@ -187,124 +187,105 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 
 	fmt.Printf("Querying bids for DSEQ: %s, Owner: %s\n", dseq, owner)
 
-	// Query bids for the deployment
-	bids, err := c.service.client.GetBids(ctx, dseq, owner)
-	if err != nil {
-		fmt.Printf("Error querying bids: %v\n", err)
-		setStatusCondition(cr, xpv1.TypeSynced, corev1.ConditionFalse, xpv1.ReasonReconcileError, fmt.Sprintf("Failed to query bids: %v", err))
-		return managed.ExternalObservation{
-			ResourceExists:   false,
-			ResourceUpToDate: false,
-		}, nil
-	}
-
 	// Update status with deployment information
 	cr.Status.AtProvider.Dseq = dseq
 	cr.Status.AtProvider.Owner = owner
 
-	if len(bids) == 0 {
-		fmt.Printf("No bids found for deployment %s\n", dseq)
-		setStatusCondition(cr, xpv1.TypeSynced, corev1.ConditionTrue, xpv1.ReasonReconcileSuccess, "No bids available yet")
-		setStatusCondition(cr, xpv1.TypeReady, corev1.ConditionFalse, xpv1.ReasonUnavailable, "Waiting for bids")
+	// Get the bidId from spec (set by BidPolicy when creating ActiveBid)
+	bidId := cr.Spec.ForProvider.BidId
+	if bidId != "" {
+		fmt.Printf("Fetching specific bid: %s\n", bidId)
+		bid, err := c.service.client.GetBid(ctx, bidId)
+		if err != nil {
+			fmt.Printf("Error fetching bid %s: %v\n", bidId, err)
+			// Keep state as pending if we can't fetch the bid yet
+			if cr.Status.AtProvider.State == "" {
+				cr.Status.AtProvider.State = "pending"
+			}
+			setStatusCondition(cr, xpv1.TypeSynced, corev1.ConditionFalse, xpv1.ReasonReconcileError, fmt.Sprintf("Failed to fetch bid: %v", err))
+			return managed.ExternalObservation{
+				ResourceExists:   true,
+				ResourceUpToDate: false,
+			}, nil
+		}
+
+		// Update status with bid information
+		c.updateStatusWithBid(cr, bid, dseq)
+		// Set the bidId in status as well
+		cr.Status.AtProvider.BidId = bidId
+		
+		// Transition from pending to received once we successfully fetch the bid
+		if cr.Status.AtProvider.State == "" || cr.Status.AtProvider.State == "pending" {
+			cr.Status.AtProvider.State = "received"
+			// Set receivedAt timestamp
+			if cr.Status.AtProvider.ReceivedAt == 0 {
+				cr.Status.AtProvider.ReceivedAt = metav1.Now().Unix()
+			}
+		}
+
+		setStatusCondition(cr, xpv1.TypeSynced, corev1.ConditionTrue, xpv1.ReasonReconcileSuccess, "Successfully fetched bid")
+		setStatusCondition(cr, xpv1.TypeReady, corev1.ConditionTrue, xpv1.ReasonAvailable, "Bid data available")
+		
 		return managed.ExternalObservation{
 			ResourceExists:   true,
 			ResourceUpToDate: true,
+			ConnectionDetails: managed.ConnectionDetails{
+				"dseq":     []byte(dseq),
+				"provider": []byte(bid.Id.Provider),
+				"price":    []byte(fmt.Sprintf("%.2f", bid.Price.Amount)),
+				"gseq":     []byte(bid.Id.Gseq),
+				"oseq":     []byte(bid.Id.Oseq),
+				"bidId":    []byte(bidId),
+			},
 		}, nil
 	}
 
-	// Filter bids by maxPrice constraint if specified
-	filteredBids := bids
-	if cr.Spec.ForProvider.MaxPrice != nil {
-		// Convert maxPrice from int64 (uakt) to float32 (akt) for comparison
-		maxPriceAkt := float32(*cr.Spec.ForProvider.MaxPrice) / 1000000.0
-		filteredBids = bids.FilterByMaxPrice(maxPriceAkt, "akt")
-	}
-
-	// Find the best bid (lowest price)
-	bestBid := filteredBids.GetLowestPriceBid()
-	if bestBid == nil {
-		fmt.Printf("No suitable bids found within constraints\n")
-		setStatusCondition(cr, xpv1.TypeSynced, corev1.ConditionTrue, xpv1.ReasonReconcileSuccess, "No bids meet criteria")
-		setStatusCondition(cr, xpv1.TypeReady, corev1.ConditionFalse, xpv1.ReasonUnavailable, "No acceptable bids")
-		return managed.ExternalObservation{
-			ResourceExists:   true,
-			ResourceUpToDate: true,
-		}, nil
-	}
-
-	// Update status with best bid information
-	c.updateStatusWithBid(cr, bestBid, dseq)
-
-	setStatusCondition(cr, xpv1.TypeSynced, corev1.ConditionTrue, xpv1.ReasonReconcileSuccess, "Successfully observed bids")
-	setStatusCondition(cr, xpv1.TypeReady, corev1.ConditionTrue, xpv1.ReasonAvailable, "Bids available")
-
-	// Check if auto-accept is enabled and we should accept this bid
-	shouldAccept := cr.Spec.ForProvider.AutoAccept != nil && *cr.Spec.ForProvider.AutoAccept
-	isUpToDate := !shouldAccept // If auto-accept is disabled, we're always up to date
-
+	// If no bidId is set, this is an error condition
+	// ActiveBids should be created with a bidId by BidPolicy
+	fmt.Printf("Error: ActiveBid has no bidId set\n")
+	cr.Status.AtProvider.State = "pending"
+	setStatusCondition(cr, xpv1.TypeSynced, corev1.ConditionFalse, xpv1.ReasonReconcileError, "No bidId specified")
+	setStatusCondition(cr, xpv1.TypeReady, corev1.ConditionFalse, xpv1.ReasonUnavailable, "Waiting for bidId")
+	
 	return managed.ExternalObservation{
 		ResourceExists:   true,
-		ResourceUpToDate: isUpToDate,
-		ConnectionDetails: managed.ConnectionDetails{
-			"dseq":     []byte(dseq),
-			"provider": []byte(bestBid.Id.Provider),
-			"price":    []byte(fmt.Sprintf("%.2f", bestBid.Price.Amount)),
-			"gseq":     []byte("1"), // Default group sequence
-			"oseq":     []byte("1"), // Default order sequence
-		},
+		ResourceUpToDate: false,
 	}, nil
 }
 
-// Create accepts the best bid if auto-accept is enabled
+// Create is not applicable for ActiveBids as they are auto-created observation resources
 func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
-	cr, ok := mg.(*akashv1alpha1.Bid)
+	cr, ok := mg.(*akashv1alpha1.ActiveBid)
 	if !ok {
-		return managed.ExternalCreation{}, errors.New(errNotBid)
+		return managed.ExternalCreation{}, errors.New(errNotActiveBid)
 	}
 
-	fmt.Printf("Creating bid acceptance for: %s\n", cr.Name)
+	fmt.Printf("ActiveBid observation started for: %s\n", cr.Name)
 
-	// Auto-accept logic would go here
-	// For now, we just mark as created since bids are observed, not created
-	setStatusCondition(cr, xpv1.TypeSynced, corev1.ConditionTrue, xpv1.ReasonReconcileSuccess, "Bid observation started")
+	// ActiveBids are observation-only resources, no creation needed
+	// Set initial state to pending
+	cr.Status.AtProvider.State = "pending"
+	setStatusCondition(cr, xpv1.TypeSynced, corev1.ConditionTrue, xpv1.ReasonReconcileSuccess, "ActiveBid observation started")
 
 	return managed.ExternalCreation{
 		ConnectionDetails: managed.ConnectionDetails{
-			"status": []byte("observing"),
+			"status": []byte("pending"),
 		},
 	}, nil
 }
 
-// Update handles bid acceptance if auto-accept is enabled
+// Update handles manual bid acceptance (for cases without BidPolicy)
 func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.ExternalUpdate, error) {
-	cr, ok := mg.(*akashv1alpha1.Bid)
+	cr, ok := mg.(*akashv1alpha1.ActiveBid)
 	if !ok {
-		return managed.ExternalUpdate{}, errors.New(errNotBid)
+		return managed.ExternalUpdate{}, errors.New(errNotActiveBid)
 	}
 
-	fmt.Printf("Updating bid for: %s\n", cr.Name)
+	fmt.Printf("Updating ActiveBid for: %s\n", cr.Name)
 
-	// If auto-accept is enabled, accept the current best bid
-	if cr.Spec.ForProvider.AutoAccept != nil && *cr.Spec.ForProvider.AutoAccept {
-		if cr.Status.AtProvider.Provider != "" && cr.Status.AtProvider.Dseq != "" {
-			fmt.Printf("Auto-accepting bid for provider: %s\n", cr.Status.AtProvider.Provider)
-			
-			err := c.service.client.AcceptBid(ctx, 
-				cr.Status.AtProvider.Dseq, 
-				cr.Status.AtProvider.Gseq, 
-				cr.Status.AtProvider.Oseq, 
-				cr.Status.AtProvider.Provider)
-			
-			if err != nil {
-				setStatusCondition(cr, xpv1.TypeSynced, corev1.ConditionFalse, xpv1.ReasonReconcileError, fmt.Sprintf("Failed to accept bid: %v", err))
-				return managed.ExternalUpdate{}, errors.Wrap(err, errAcceptBid)
-			}
-			
-			// Update state to indicate bid was accepted
-			cr.Status.AtProvider.State = "matched"
-			setStatusCondition(cr, xpv1.TypeReady, corev1.ConditionTrue, xpv1.ReasonAvailable, "Bid accepted, lease created")
-		}
-	}
+	// ActiveBids are primarily observation-only
+	// Manual bid acceptance will be handled by BidPolicy controller
+	// For now, just update the connection details
 
 	return managed.ExternalUpdate{
 		ConnectionDetails: managed.ConnectionDetails{
@@ -316,21 +297,21 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	}, nil
 }
 
-// Delete is a no-op for bids since they are observations, not resources we create
+// Delete is a no-op for ActiveBids since they are observations, not resources we create
 func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
-	cr, ok := mg.(*akashv1alpha1.Bid)
+	cr, ok := mg.(*akashv1alpha1.ActiveBid)
 	if !ok {
-		return errors.New(errNotBid)
+		return errors.New(errNotActiveBid)
 	}
 
-	fmt.Printf("Deleting bid observation: %s\n", cr.Name)
-	// Nothing to delete - bids are observations of the Akash network state
+	fmt.Printf("Deleting ActiveBid observation: %s\n", cr.Name)
+	// Nothing to delete - ActiveBids are observations of the Akash network state
 	return nil
 }
 
-// getReferencedDeployment retrieves the Deployment CR referenced by the Bid
+// getReferencedDeployment retrieves the Deployment CR referenced by the ActiveBid
 // Supports cross-namespace references and validates the deployment is ready
-func (c *external) getReferencedDeployment(ctx context.Context, cr *akashv1alpha1.Bid) (*v1alpha1.Deployment, error) {
+func (c *external) getReferencedDeployment(ctx context.Context, cr *akashv1alpha1.ActiveBid) (*v1alpha1.Deployment, error) {
 	deployment := &v1alpha1.Deployment{}
 	
 	// Determine the namespace for the deployment reference
@@ -368,23 +349,23 @@ func (c *external) getReferencedDeployment(ctx context.Context, cr *akashv1alpha
 
 
 // updateStatusWithBid updates the CR status with bid information
-func (c *external) updateStatusWithBid(cr *akashv1alpha1.Bid, bid *clienttypes.Bid, dseq string) {
-	cr.Status.AtProvider.BidId = fmt.Sprintf("%s-%s-%s-%s-%s", bid.Id.Owner, bid.Id.Dseq, bid.Id.Gseq, bid.Id.Oseq, bid.Id.Provider)
+func (c *external) updateStatusWithBid(cr *akashv1alpha1.ActiveBid, bid *clienttypes.Bid, dseq string) {
+	// BidId is set from spec, not computed here
 	cr.Status.AtProvider.Provider = bid.Id.Provider
 	cr.Status.AtProvider.Gseq = bid.Id.Gseq
 	cr.Status.AtProvider.Oseq = bid.Id.Oseq
-	cr.Status.AtProvider.State = bid.State
+	// Don't override state here - it's managed by the controller's lifecycle
 	cr.Status.AtProvider.CreatedAt = bid.CreatedAt
 	
 	if cr.Status.AtProvider.Price == nil {
-		cr.Status.AtProvider.Price = &akashv1alpha1.BidPriceStatus{}
+		cr.Status.AtProvider.Price = &akashv1alpha1.ActiveBidPriceStatus{}
 	}
 	cr.Status.AtProvider.Price.Amount = strconv.FormatFloat(float64(bid.Price.Amount), 'f', 6, 32)
 	cr.Status.AtProvider.Price.Denom = bid.Price.Denom
 }
 
-// setStatusCondition sets a condition on the bid resource
-func setStatusCondition(cr *akashv1alpha1.Bid, conditionType xpv1.ConditionType, status corev1.ConditionStatus, reason xpv1.ConditionReason, message string) {
+// setStatusCondition sets a condition on the ActiveBid resource
+func setStatusCondition(cr *akashv1alpha1.ActiveBid, conditionType xpv1.ConditionType, status corev1.ConditionStatus, reason xpv1.ConditionReason, message string) {
 	cr.SetConditions(xpv1.Condition{
 		Type:               conditionType,
 		Status:             status,

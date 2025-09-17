@@ -1,7 +1,7 @@
 apiVersion: akash.overlock.network/v1alpha1
-kind: Bid
+kind: ActiveBid
 metadata:
-  name: example-bid-observer
+  name: example-activebid-observer
 spec:
   providerConfigRef:
     name: default
@@ -9,26 +9,24 @@ spec:
     deploymentRef:
       name: example-deployment
       # namespace: default  # Optional - defaults to same namespace
-    autoAccept: false  # Just observe bids, don't auto-accept
-    maxPrice: 10000000  # Maximum 10 AKT in uakt
+    bidId: "akash1owner-12345-1-1-akash1provider"  # Set by BidPolicy controller
 ---
 apiVersion: akash.overlock.network/v1alpha1
-kind: Bid
+kind: ActiveBid
 metadata:
-  name: example-auto-accept-bid
+  name: example-activebid-different-provider
 spec:
   providerConfigRef:
     name: default
   forProvider:
     deploymentRef:
       name: example-deployment
-    autoAccept: true   # Automatically accept the lowest qualifying bid
-    maxPrice: 5000000  # Maximum 5 AKT in uakt
+    bidId: "akash1owner-12345-1-1-akash1provider2"  # Different provider's bid
 ---
 apiVersion: akash.overlock.network/v1alpha1
-kind: Bid
+kind: ActiveBid
 metadata:
-  name: cross-namespace-bid
+  name: cross-namespace-activebid
   namespace: bid-observers
 spec:
   providerConfigRef:
@@ -37,5 +35,4 @@ spec:
     deploymentRef:
       name: production-app
       namespace: production  # Reference deployment in different namespace
-    autoAccept: false
-    maxPrice: 15000000  # Maximum 15 AKT in uakt
+    bidId: "akash1owner-67890-1-1-akash1prodprovider"

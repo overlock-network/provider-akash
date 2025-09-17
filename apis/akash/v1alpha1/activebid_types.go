@@ -35,24 +35,20 @@ type DeploymentReference struct {
 	Namespace *string `json:"namespace,omitempty"`
 }
 
-// BidParameters are the configurable fields of a Bid.
-type BidParameters struct {
-	// DeploymentRef is a reference to the Deployment CR this bid is for
+// ActiveBidParameters are the configurable fields of an ActiveBid.
+type ActiveBidParameters struct {
+	// DeploymentRef is a reference to the Deployment CR this ActiveBid observes
 	// +kubebuilder:validation:Required
 	DeploymentRef DeploymentReference `json:"deploymentRef"`
 
-	// AutoAccept automatically accepts the lowest bid if true
-	// +kubebuilder:default=false
-	AutoAccept *bool `json:"autoAccept,omitempty"`
-
-	// MaxPrice is the maximum acceptable price filter in uakt
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=1000000000000
-	MaxPrice *int64 `json:"maxPrice,omitempty"`
+	// BidId is the unique identifier for the bid to observe (set by BidPolicy)
+	// Format: owner-dseq-gseq-oseq-provider
+	// +kubebuilder:validation:Required
+	BidId string `json:"bidId"`
 }
 
-// BidPriceStatus represents price information for a bid
-type BidPriceStatus struct {
+// ActiveBidPriceStatus represents price information for a bid
+type ActiveBidPriceStatus struct {
 	// Amount is the bid price amount
 	Amount string `json:"amount,omitempty"`
 
@@ -60,9 +56,9 @@ type BidPriceStatus struct {
 	Denom string `json:"denom,omitempty"`
 }
 
-// BidObservation are the observable fields of a Bid.
-type BidObservation struct {
-	// BidId is the unique identifier for the bid
+// ActiveBidObservation are the observable fields of an ActiveBid.
+type ActiveBidObservation struct {
+	// BidId is the unique identifier for the bid (empty when pending)
 	BidId string `json:"bidId,omitempty"`
 
 	// Dseq is the deployment sequence number resolved from deploymentRef
@@ -77,34 +73,37 @@ type BidObservation struct {
 	// Owner is the deployment owner resolved from deploymentRef
 	Owner string `json:"owner,omitempty"`
 
-	// Provider is the provider address who submitted the bid
+	// Provider is the provider address who submitted the bid (empty when pending)
 	Provider string `json:"provider,omitempty"`
 
-	// Price contains the bid price information
-	Price *BidPriceStatus `json:"price,omitempty"`
+	// Price contains the bid price information (empty when pending)
+	Price *ActiveBidPriceStatus `json:"price,omitempty"`
 
-	// State is the current bid state (open, matched, lost, closed)
+	// State is the ActiveBid state (pending, received, matched, lost, closed)
 	State string `json:"state,omitempty"`
 
-	// CreatedAt is when the bid was received (block height)
+	// CreatedAt is when the ActiveBid was created
 	CreatedAt int64 `json:"createdAt,omitempty"`
+
+	// ReceivedAt is when the actual bid was received from provider
+	ReceivedAt int64 `json:"receivedAt,omitempty"`
 }
 
-// A BidSpec defines the desired state of a Bid.
-type BidSpec struct {
+// An ActiveBidSpec defines the desired state of an ActiveBid.
+type ActiveBidSpec struct {
 	xpv1.ResourceSpec `json:",inline"`
-	ForProvider       BidParameters `json:"forProvider"`
+	ForProvider       ActiveBidParameters `json:"forProvider"`
 }
 
-// A BidStatus represents the observed state of a Bid.
-type BidStatus struct {
+// An ActiveBidStatus represents the observed state of an ActiveBid.
+type ActiveBidStatus struct {
 	xpv1.ResourceStatus `json:",inline"`
-	AtProvider          BidObservation `json:"atProvider,omitempty"`
+	AtProvider          ActiveBidObservation `json:"atProvider,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// A Bid represents an Akash Network bid resource for deployment auctions.
+// An ActiveBid represents an Akash Network ActiveBid for observing and managing provider bids.
 // +kubebuilder:printcolumn:name="READY",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 // +kubebuilder:printcolumn:name="SYNCED",type="string",JSONPath=".status.conditions[?(@.type=='Synced')].status"
 // +kubebuilder:printcolumn:name="DEPLOYMENT",type="string",JSONPath=".spec.forProvider.deploymentRef.name"
@@ -114,31 +113,31 @@ type BidStatus struct {
 // +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster,categories={crossplane,managed,akash}
-type Bid struct {
+type ActiveBid struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   BidSpec   `json:"spec"`
-	Status BidStatus `json:"status,omitempty"`
+	Spec   ActiveBidSpec   `json:"spec"`
+	Status ActiveBidStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// BidList contains a list of Bid
-type BidList struct {
+// ActiveBidList contains a list of ActiveBid
+type ActiveBidList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Bid `json:"items"`
+	Items           []ActiveBid `json:"items"`
 }
 
-// Bid type metadata.
+// ActiveBid type metadata.
 var (
-	BidKind             = reflect.TypeOf(Bid{}).Name()
-	BidGroupKind        = schema.GroupKind{Group: Group, Kind: BidKind}.String()
-	BidKindAPIVersion   = BidKind + "." + SchemeGroupVersion.String()
-	BidGroupVersionKind = SchemeGroupVersion.WithKind(BidKind)
+	ActiveBidKind             = reflect.TypeOf(ActiveBid{}).Name()
+	ActiveBidGroupKind        = schema.GroupKind{Group: Group, Kind: ActiveBidKind}.String()
+	ActiveBidKindAPIVersion   = ActiveBidKind + "." + SchemeGroupVersion.String()
+	ActiveBidGroupVersionKind = SchemeGroupVersion.WithKind(ActiveBidKind)
 )
 
 func init() {
-	SchemeBuilder.Register(&Bid{}, &BidList{})
+	SchemeBuilder.Register(&ActiveBid{}, &ActiveBidList{})
 }

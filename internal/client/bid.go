@@ -64,16 +64,3 @@ func (ak *AkashClient) GetBid(ctx context.Context, bidId string) (*clienttypes.B
 	return nil, fmt.Errorf("bid not found for bidId %s", bidId)
 }
 
-// AcceptBid accepts a specific bid, which creates a lease on the Akash network
-func (ak *AkashClient) AcceptBid(ctx context.Context, dseq, gseq, oseq, provider string) error {
-	cmd := cli.AkashCli(ak).Tx().Market().Lease().Create().
-		SetDseq(dseq).SetGseq(gseq).SetOseq(oseq).SetProvider(provider).
-		SetFrom(ak.Config.KeyName).SetChainId(ak.Config.ChainId).SetNode(ak.Config.Node)
-
-	_, err := cmd.Raw()
-	if err != nil {
-		return fmt.Errorf("failed to create lease (accept bid): %w", err)
-	}
-
-	return nil
-}

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package bid
+package activebid
 
 import (
 	"testing"
@@ -25,11 +25,11 @@ import (
 	clienttypes "github.com/overlock-network/provider-akash/internal/client/types"
 )
 
-func TestBidTypeMetadata(t *testing.T) {
-	// Test that our Bid type has the expected metadata
-	expectedKind := "Bid"
-	if akashv1alpha1.BidKind != expectedKind {
-		t.Errorf("Expected BidKind to be %s, got %s", expectedKind, akashv1alpha1.BidKind)
+func TestActiveBidTypeMetadata(t *testing.T) {
+	// Test that our ActiveBid type has the expected metadata
+	expectedKind := "ActiveBid"
+	if akashv1alpha1.ActiveBidKind != expectedKind {
+		t.Errorf("Expected ActiveBidKind to be %s, got %s", expectedKind, akashv1alpha1.ActiveBidKind)
 	}
 
 	expectedGroup := "akash.overlock.network"
@@ -38,47 +38,41 @@ func TestBidTypeMetadata(t *testing.T) {
 	}
 }
 
-func TestBidCreation(t *testing.T) {
-	// Test that we can create a Bid instance
-	autoAccept := true
-	maxPrice := int64(1000000)
+func TestActiveBidCreation(t *testing.T) {
+	// Test that we can create an ActiveBid instance
+	bidId := "akash1owner-12345-1-1-akash1provider"
 
-	bid := &akashv1alpha1.Bid{
+	activeBid := &akashv1alpha1.ActiveBid{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-bid",
+			Name:      "test-activebid",
 			Namespace: "default",
 		},
-		Spec: akashv1alpha1.BidSpec{
-			ForProvider: akashv1alpha1.BidParameters{
+		Spec: akashv1alpha1.ActiveBidSpec{
+			ForProvider: akashv1alpha1.ActiveBidParameters{
 				DeploymentRef: akashv1alpha1.DeploymentReference{
 					Name:      "test-deployment",
 					Namespace: nil, // Same namespace
 				},
-				AutoAccept: &autoAccept,
-				MaxPrice:   &maxPrice,
+				BidId: bidId,
 			},
 		},
 	}
 
 	// Basic validation
-	if bid.Name != "test-bid" {
-		t.Errorf("Expected name to be test-bid, got %s", bid.Name)
+	if activeBid.Name != "test-activebid" {
+		t.Errorf("Expected name to be test-activebid, got %s", activeBid.Name)
 	}
 
-	if bid.Spec.ForProvider.DeploymentRef.Name != "test-deployment" {
-		t.Errorf("Expected deployment ref name to be test-deployment, got %s", bid.Spec.ForProvider.DeploymentRef.Name)
+	if activeBid.Spec.ForProvider.DeploymentRef.Name != "test-deployment" {
+		t.Errorf("Expected deployment ref name to be test-deployment, got %s", activeBid.Spec.ForProvider.DeploymentRef.Name)
 	}
 
-	if bid.Spec.ForProvider.AutoAccept == nil || *bid.Spec.ForProvider.AutoAccept != true {
-		t.Error("Expected AutoAccept to be true")
-	}
-
-	if bid.Spec.ForProvider.MaxPrice == nil || *bid.Spec.ForProvider.MaxPrice != 1000000 {
-		t.Error("Expected MaxPrice to be 1000000")
+	if activeBid.Spec.ForProvider.BidId != bidId {
+		t.Errorf("Expected BidId to be %s, got %s", bidId, activeBid.Spec.ForProvider.BidId)
 	}
 }
 
-func TestBidFiltering(t *testing.T) {
+func TestBidDataProcessing(t *testing.T) {
 	// Test the GetLowestPriceBid method from types
 	bids := clienttypes.Bids{
 		{

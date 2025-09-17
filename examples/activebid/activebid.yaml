@@ -1,7 +1,7 @@
 apiVersion: akash.overlock.network/v1alpha1
-kind: Bid
+kind: ActiveBid
 metadata:
-  name: example-bid
+  name: example-activebid
 spec:
   providerConfigRef:
     name: default
@@ -9,18 +9,16 @@ spec:
     deploymentRef:
       name: example-deployment
       # namespace: default  # Optional - defaults to same namespace
-    autoAccept: true
-    maxPrice: 5000000  # Maximum 5 AKT in uakt
+    bidId: "akash1owner-12345-1-1-akash1provider"  # Set by BidPolicy controller when creating ActiveBid
 ---
 apiVersion: akash.overlock.network/v1alpha1
-kind: Bid
+kind: ActiveBid
 metadata:
-  name: manual-bid-observer
+  name: activebid-observer-only
 spec:
   providerConfigRef:
     name: default
   forProvider:
     deploymentRef:
       name: example-deployment
-    autoAccept: false  # Just observe bids, don't auto-accept
-    maxPrice: 10000000  # Maximum 10 AKT in uakt
+    bidId: "akash1owner-12345-1-1-akash1provider2"  # Just observes this bid's status

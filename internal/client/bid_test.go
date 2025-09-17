@@ -130,24 +130,7 @@ func TestGetBidsClient(t *testing.T) {
 	}
 }
 
-func TestAcceptBidClient(t *testing.T) {
-	// Test would require actual AkashClient setup
-	// This is a placeholder for integration testing
-	ctx := context.Background()
-	
-	// Mock test - in real test this would use a mock client
-	_ = ctx // Use ctx to avoid unused variable error
-	
-	// Test basic parameter validation
-	dseq := "12345"
-	gseq := "1"
-	oseq := "1"
-	provider := "akash1provider"
-	
-	if dseq == "" || gseq == "" || oseq == "" || provider == "" {
-		t.Error("All bid parameters should not be empty")
-	}
-}
+// AcceptBid functionality removed - handled by BidPolicy controller
 
 func TestGetBidClient(t *testing.T) {
 	// Test would require actual AkashClient setup
