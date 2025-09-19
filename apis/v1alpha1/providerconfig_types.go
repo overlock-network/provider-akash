@@ -100,6 +100,12 @@ type AkashConfiguration struct {
 	// +optional
 	// +kubebuilder:default="https://akash-api.polkachu.com"
 	ProvidersApi *string `json:"providersApi,omitempty"`
+
+	// SkipTLSVerification skips TLS certificate verification when connecting to Akash nodes.
+	// This should only be used for testing or development environments.
+	// +optional
+	// +kubebuilder:default=false
+	SkipTLSVerification *bool `json:"skipTLSVerification,omitempty"`
 }
 
 // A ProviderConfigStatus reflects the observed state of a ProviderConfig.

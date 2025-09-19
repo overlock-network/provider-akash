@@ -183,6 +183,16 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		}, nil
 	}
 
+	// Check if external name is just the resource name (Crossplane default behavior)
+	// If so, treat as not yet created since we need the actual DSEQ from Akash
+	if dseq == cr.Name {
+		fmt.Printf("External-name is resource name (%s), deployment not yet created with actual DSEQ\n", dseq)
+		return managed.ExternalObservation{
+			ResourceExists:   false,
+			ResourceUpToDate: false,
+		}, nil
+	}
+
 	// Use the account address from the client configuration as the owner
 	owner := c.service.client.Config.AccountAddress
 	if owner == "" {
