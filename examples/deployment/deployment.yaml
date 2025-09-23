@@ -4,7 +4,7 @@ metadata:
   name: nginx-deployment
 spec:
   providerConfigRef:
-    name: default
+    name: sandbox
   forProvider:
     # SDL (Stack Definition Language) for the Akash deployment
     sdl: |
@@ -21,14 +21,14 @@ spec:
       
       profiles:
         compute:
-          web:
+          web-profile:
             resources:
               cpu:
                 units: 0.5
               memory:
                 size: 512Mi
               storage:
-                - size: 1Gi
+                size: 1Gi
         placement:
           akash:
             attributes:
@@ -44,7 +44,7 @@ spec:
       deployment:
         web:
           akash:
-            profile: web
+            profile: web-profile
             count: 1
 
     # Deployment deposit in uakt (5 AKT = 5,000,000 uakt)
@@ -56,4 +56,4 @@ spec:
   # Connection secret for deployment details
   writeConnectionSecretToRef:
     name: nginx-deployment-connection
-    namespace: crossplane-system
+    namespace: default

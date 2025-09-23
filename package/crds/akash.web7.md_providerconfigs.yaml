@@ -95,6 +95,12 @@ spec:
                     default: https://akash-api.polkachu.com
                     description: ProvidersApi is the URL of the Akash providers API.
                     type: string
+                  skipTLSVerification:
+                    default: false
+                    description: |-
+                      SkipTLSVerification skips TLS certificate verification when connecting to Akash nodes.
+                      This should only be used for testing or development environments.
+                    type: boolean
                   version:
                     default: 0.18.0
                     description: Version specifies the Akash version to use.

@@ -1,0 +1,24 @@
+apiVersion: akash.overlock.network/v1alpha1
+kind: ActiveBid
+metadata:
+  name: example-activebid
+spec:
+  providerConfigRef:
+    name: default
+  forProvider:
+    deploymentRef:
+      name: example-deployment
+      # namespace: default  # Optional - defaults to same namespace
+    bidId: "akash1owner-12345-1-1-akash1provider"  # Set by BidPolicy controller when creating ActiveBid
+---
+apiVersion: akash.overlock.network/v1alpha1
+kind: ActiveBid
+metadata:
+  name: activebid-observer-only
+spec:
+  providerConfigRef:
+    name: default
+  forProvider:
+    deploymentRef:
+      name: example-deployment
+    bidId: "akash1owner-12345-1-1-akash1provider2"  # Just observes this bid's status

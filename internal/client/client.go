@@ -11,6 +11,15 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
+	"github.com/cosmos/cosmos-sdk/std"
+	"github.com/cosmos/cosmos-sdk/x/auth/tx"
+	"github.com/cosmos/cosmos-sdk/x/auth"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	"github.com/cosmos/cosmos-sdk/x/bank"
+	"github.com/cosmos/cosmos-sdk/types/module"
+	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
+	"crypto/tls"
+	"net/http"
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
 	"github.com/pkg/errors"
 	akashclient "pkg.akt.dev/go/node/client/v1beta3"
@@ -49,18 +58,19 @@ type credentialCache struct {
 }
 
 type AkashProviderConfiguration struct {
-	Creds          []byte
-	Passphrase     []byte
-	KeyName        string
-	KeyringBackend string
-	AccountAddress string
-	Net            string
-	Version        string
-	ChainId        string
-	Node           string
-	Home           string
-	Path           string
-	ProvidersApi   string
+	Creds               []byte
+	Passphrase          []byte
+	KeyName             string
+	KeyringBackend      string
+	AccountAddress      string
+	Net                 string
+	Version             string
+	ChainId             string
+	Node                string
+	Home                string
+	Path                string
+	ProvidersApi        string
+	SkipTLSVerification bool
 }
 
 func (ak *AkashClient) GetContext() context.Context {
@@ -110,35 +120,45 @@ func getStringValue(ptr *string, defaultValue string) string {
 	return defaultValue
 }
 
+// Helper function to get bool value with default fallback
+func getBoolValue(ptr *bool, defaultValue bool) bool {
+	if ptr != nil {
+		return *ptr
+	}
+	return defaultValue
+}
+
 // buildAkashProviderConfiguration converts AkashConfiguration to AkashProviderConfiguration with constants for defaults
 func buildAkashProviderConfiguration(config *apisv1alpha1.AkashConfiguration) AkashProviderConfiguration {
 	// Set defaults if config is nil
 	if config == nil {
 		return AkashProviderConfiguration{
-			KeyName:        DefaultKeyName,
-			KeyringBackend: DefaultKeyringBackend,
-			Net:            DefaultNet,
-			Version:        DefaultVersion,
-			ChainId:        DefaultChainId,
-			Node:           DefaultNode,
-			Home:           DefaultHome,
-			Path:           DefaultPath,
-			ProvidersApi:   DefaultProvidersApi,
+			KeyName:             DefaultKeyName,
+			KeyringBackend:      DefaultKeyringBackend,
+			Net:                 DefaultNet,
+			Version:             DefaultVersion,
+			ChainId:             DefaultChainId,
+			Node:                DefaultNode,
+			Home:                DefaultHome,
+			Path:                DefaultPath,
+			ProvidersApi:        DefaultProvidersApi,
+			SkipTLSVerification: false,
 		}
 	}
 
 	// Build configuration with values from ProviderConfig, using constants for defaults
 	return AkashProviderConfiguration{
-		KeyName:        getStringValue(config.KeyName, DefaultKeyName),
-		KeyringBackend: getStringValue(config.KeyringBackend, DefaultKeyringBackend),
-		AccountAddress: getStringValue(config.AccountAddress, ""),
-		Net:            getStringValue(config.Net, DefaultNet),
-		Version:        getStringValue(config.Version, DefaultVersion),
-		ChainId:        getStringValue(config.ChainId, DefaultChainId),
-		Node:           getStringValue(config.Node, DefaultNode),
-		Home:           getStringValue(config.Home, DefaultHome),
-		Path:           getStringValue(config.Path, DefaultPath),
-		ProvidersApi:   getStringValue(config.ProvidersApi, DefaultProvidersApi),
+		KeyName:             getStringValue(config.KeyName, DefaultKeyName),
+		KeyringBackend:      getStringValue(config.KeyringBackend, DefaultKeyringBackend),
+		AccountAddress:      getStringValue(config.AccountAddress, ""),
+		Net:                 getStringValue(config.Net, DefaultNet),
+		Version:             getStringValue(config.Version, DefaultVersion),
+		ChainId:             getStringValue(config.ChainId, DefaultChainId),
+		Node:                getStringValue(config.Node, DefaultNode),
+		Home:                getStringValue(config.Home, DefaultHome),
+		Path:                getStringValue(config.Path, DefaultPath),
+		ProvidersApi:        getStringValue(config.ProvidersApi, DefaultProvidersApi),
+		SkipTLSVerification: getBoolValue(config.SkipTLSVerification, false),
 		// Creds will be set later when loaded
 	}
 }
@@ -329,9 +349,47 @@ func (ak *AkashClient) getNodeClient() (akashclient.Client, error) {
 		return nil, fmt.Errorf("no credentials available")
 	}
 
-	interfaceRegistry := types.NewInterfaceRegistry()
-	cdc := codec.NewProtoCodec(interfaceRegistry)
+	// Configure Akash Bech32 prefixes
+	sdkConfig := sdktypes.GetConfig()
+	sdkConfig.SetBech32PrefixForAccount("akash", "akashpub")
+	sdkConfig.SetBech32PrefixForValidator("akashvaloper", "akashvaloperpub")
+	sdkConfig.SetBech32PrefixForConsensusNode("akashvalcons", "akashvalconspub")
 
+	// Create standard cosmos codec for keyring operations
+	interfaceRegistry := types.NewInterfaceRegistry()
+	
+	// Register core SDK interfaces
+	std.RegisterInterfaces(interfaceRegistry)
+	sdktypes.RegisterInterfaces(interfaceRegistry)
+	
+	// Register module basics interfaces
+	moduleBasics := module.NewBasicManager(
+		auth.AppModuleBasic{},
+		bank.AppModuleBasic{},
+	)
+	moduleBasics.RegisterInterfaces(interfaceRegistry)
+	
+	cdc := codec.NewProtoCodec(interfaceRegistry)
+	
+	// Create transaction config with proper sign mode
+	txConfig := tx.NewTxConfig(cdc, tx.DefaultSignModes)
+	
+	// Create account retriever for querying account info
+	accountRetriever := authtypes.AccountRetriever{}
+	
+	// Create RPC client for node communication with configurable TLS verification
+	httpClient := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: ak.Config.SkipTLSVerification,
+			},
+		},
+	}
+	rpcClient, err := rpchttp.NewWithClient(ak.Config.Node, "", httpClient)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create RPC client: %w", err)
+	}
+	
 	kr := keyring.NewInMemory(cdc)
 
 	passphrase := ""
@@ -348,13 +406,16 @@ func (ak *AkashClient) getNodeClient() (akashclient.Client, error) {
 		WithKeyring(kr).
 		WithChainID(ak.Config.ChainId).
 		WithNodeURI(ak.Config.Node).
-		WithClient(nil).
+		WithClient(rpcClient).
+		WithCodec(cdc).
+		WithInterfaceRegistry(interfaceRegistry).
 		WithBroadcastMode(flags.BroadcastSync).
 		WithFromName(ak.Config.KeyName).
 		WithFromAddress(nil).
 		WithSkipConfirmation(true).
-		WithTxConfig(nil).
-		WithAccountRetriever(nil).
+		WithTxConfig(txConfig).
+		WithSignModeStr("direct").
+		WithAccountRetriever(accountRetriever).
 		WithInput(nil).
 		WithOutput(nil).
 		WithViper("")
