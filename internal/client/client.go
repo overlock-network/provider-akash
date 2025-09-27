@@ -3,26 +3,32 @@ package client
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
+	"crypto/tls"
+	"net/http"
+
+	deploymentcli "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	"github.com/cosmos/cosmos-sdk/std"
-	"github.com/cosmos/cosmos-sdk/x/auth/tx"
+	sdktypes "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/x/auth"
+	"github.com/cosmos/cosmos-sdk/x/auth/tx"
+	clienttx "github.com/cosmos/cosmos-sdk/client/tx"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	"github.com/cosmos/cosmos-sdk/x/bank"
-	"github.com/cosmos/cosmos-sdk/types/module"
-	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
-	"crypto/tls"
-	"net/http"
-	sdktypes "github.com/cosmos/cosmos-sdk/types"
+	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
+	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/pkg/errors"
-	akashclient "pkg.akt.dev/go/node/client/v1beta3"
+	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
+
+	// Note: Using a simple client wrapper instead of akash-api client due to version incompatibilities
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
@@ -30,6 +36,34 @@ import (
 
 	apisv1alpha1 "github.com/overlock-network/provider-akash/apis/v1alpha1"
 )
+
+const (
+	// Akash network constants
+	Bech32PrefixAccAddr = "akash"
+)
+
+// EncodingConfig specifies the concrete encoding types to use for a given app.
+type EncodingConfig struct {
+	InterfaceRegistry types.InterfaceRegistry
+	Codec             codec.Codec
+	TxConfig          sdkclient.TxConfig
+	Amino             *codec.LegacyAmino
+}
+
+// makeEncodingConfig creates an EncodingConfig for the cosmos SDK
+func makeEncodingConfig(moduleBasics ...interface{}) EncodingConfig {
+	amino := codec.NewLegacyAmino()
+	interfaceRegistry := types.NewInterfaceRegistry()
+	codec := codec.NewProtoCodec(interfaceRegistry)
+	txCfg := tx.NewTxConfig(codec, tx.DefaultSignModes)
+
+	return EncodingConfig{
+		InterfaceRegistry: interfaceRegistry,
+		Codec:             codec,
+		TxConfig:          txCfg,
+		Amino:             amino,
+	}
+}
 
 type AkashClient struct {
 	ctx             context.Context
@@ -42,6 +76,10 @@ type AkashClient struct {
 	secretRef       *SecretReference
 	managedResource resource.Managed // Managed resource with ProviderConfigReference
 	usage           resource.Tracker // For tracking ProviderConfig usage
+
+	// Development tracking for sent deployment IDs to prevent false updates
+	sentDeploymentIDs map[string]bool
+	mu               sync.RWMutex
 }
 
 type SecretReference struct {
@@ -87,16 +125,21 @@ func (ak *AkashClient) SetGlobalTransactionNote(note string) {
 
 // New creates a new AkashClient with direct credential configuration (legacy)
 func New(ctx context.Context, configuration AkashProviderConfiguration) *AkashClient {
-	return &AkashClient{ctx: ctx, Config: configuration}
+	return &AkashClient{
+		ctx:               ctx, 
+		Config:            configuration,
+		sentDeploymentIDs: make(map[string]bool),
+	}
 }
 
 // NewWithSecretRef creates a new AkashClient that loads credentials from a Kubernetes secret
 func NewWithSecretRef(ctx context.Context, kubeClient client.Client, secretRef SecretReference, config AkashProviderConfiguration) *AkashClient {
 	return &AkashClient{
-		ctx:        ctx,
-		Config:     config,
-		kubeClient: kubeClient,
-		secretRef:  &secretRef,
+		ctx:               ctx,
+		Config:            config,
+		kubeClient:        kubeClient,
+		secretRef:         &secretRef,
+		sentDeploymentIDs: make(map[string]bool),
 		credentialCache: &credentialCache{
 			ttl: 5 * time.Minute, // Default TTL for credential cache
 		},
@@ -126,6 +169,176 @@ func getBoolValue(ptr *bool, defaultValue bool) bool {
 		return *ptr
 	}
 	return defaultValue
+}
+
+// QueryClient provides query functionality
+type QueryClient struct {
+	clientCtx sdkclient.Context
+}
+
+// Deployment returns the deployment query client
+func (q *QueryClient) Deployment() deploymentcli.QueryClient {
+	return deploymentcli.NewQueryClient(q.clientCtx)
+}
+
+// Auth returns the auth query client
+func (q *QueryClient) Auth() authtypes.QueryClient {
+	return authtypes.NewQueryClient(q.clientCtx)
+}
+
+// Bank returns the bank query client
+func (q *QueryClient) Bank() banktypes.QueryClient {
+	return banktypes.NewQueryClient(q.clientCtx)
+}
+
+// Staking returns the staking query client
+func (q *QueryClient) Staking() stakingtypes.QueryClient {
+	return stakingtypes.NewQueryClient(q.clientCtx)
+}
+
+// TxClient provides transaction functionality
+type TxClient struct {
+	clientCtx sdkclient.Context
+}
+
+// BroadcastMsgs broadcasts messages using the client context
+func (t *TxClient) BroadcastMsgs(ctx context.Context, msgs ...sdktypes.Msg) (*sdktypes.TxResponse, error) {
+	// Build transaction with proper gas and fees
+	gasLimit := uint64(200000)
+	gasPrice := sdktypes.NewDecWithPrec(25, 4) // 0.0025 AKT per gas unit
+	feeAmount := gasPrice.MulInt64(int64(gasLimit)).TruncateInt()
+
+	// Ensure minimum fee of 500uakt
+	minFee := sdktypes.NewInt(500)
+	if feeAmount.LT(minFee) {
+		feeAmount = minFee
+	}
+
+	fees := sdktypes.NewCoins(sdktypes.NewCoin("uakt", feeAmount))
+
+	// Check if we have proper client context setup
+	if t.clientCtx.GetFromAddress().Empty() {
+		return nil, fmt.Errorf("no from address configured in client context")
+	}
+
+	if t.clientCtx.Keyring == nil {
+		return nil, fmt.Errorf("no keyring configured in client context")
+	}
+
+	// Log transaction details for debugging
+	fmt.Printf("🚀 Preparing transaction - Chain ID: %s, From: %s\n", 
+		t.clientCtx.ChainID, t.clientCtx.GetFromAddress().String())
+
+	// Create transaction factory for signing and broadcasting
+	txf := clienttx.Factory{}.
+		WithTxConfig(t.clientCtx.TxConfig).
+		WithAccountRetriever(t.clientCtx.AccountRetriever).
+		WithChainID(t.clientCtx.ChainID).
+		WithKeybase(t.clientCtx.Keyring).
+		WithGas(gasLimit).
+		WithFees(fees.String()).
+		WithSignMode(t.clientCtx.TxConfig.SignModeHandler().DefaultMode())
+
+	// Build, sign and broadcast the transaction
+	return t.broadcastTxWithFactory(txf, msgs...)
+}
+
+// broadcastTxWithFactory handles the actual transaction building, signing and broadcasting
+func (t *TxClient) broadcastTxWithFactory(txf clienttx.Factory, msgs ...sdktypes.Msg) (*sdktypes.TxResponse, error) {
+	// Prepare the factory by fetching account info from the network
+	txf, err := t.prepareFactory(txf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare factory: %w", err)
+	}
+
+	// Build the unsigned transaction
+	txBuilder, err := txf.BuildUnsignedTx(msgs...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build unsigned transaction: %w", err)
+	}
+
+	// Sign the transaction
+	err = clienttx.Sign(txf, t.clientCtx.GetFromName(), txBuilder, true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign transaction: %w", err)
+	}
+
+	// Encode the transaction
+	txBytes, err := t.clientCtx.TxConfig.TxEncoder()(txBuilder.GetTx())
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode transaction: %w", err)
+	}
+
+	// Broadcast the transaction
+	res, err := t.clientCtx.BroadcastTx(txBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to broadcast transaction: %w", err)
+	}
+
+	return res, nil
+}
+
+// prepareFactory ensures the account exists and fetches account number and sequence
+func (t *TxClient) prepareFactory(txf clienttx.Factory) (clienttx.Factory, error) {
+	from := t.clientCtx.GetFromAddress()
+
+	// Ensure the account exists
+	if err := txf.AccountRetriever().EnsureExists(t.clientCtx, from); err != nil {
+		return txf, fmt.Errorf("account does not exist: %w", err)
+	}
+
+	// Get account number and sequence from the network
+	num, seq, err := txf.AccountRetriever().GetAccountNumberSequence(t.clientCtx, from)
+	if err != nil {
+		return txf, fmt.Errorf("failed to get account number and sequence: %w", err)
+	}
+
+	// Log the account information for debugging
+	fmt.Printf("🔐 Account info - Address: %s, Number: %d, Sequence: %d, Chain-ID: %s\n", 
+		from.String(), num, seq, t.clientCtx.ChainID)
+
+	// Update factory with the fetched account information
+	txf = txf.WithAccountNumber(num).WithSequence(seq)
+
+	return txf, nil
+}
+
+// NodeClient provides Akash node client functionality
+type NodeClient struct {
+	ctx       context.Context
+	clientCtx sdkclient.Context
+	query     *QueryClient
+	tx        *TxClient
+}
+
+// NewNodeClient creates a new NodeClient
+func NewNodeClient(ctx context.Context, clientCtx sdkclient.Context) *NodeClient {
+	return &NodeClient{
+		ctx:       ctx,
+		clientCtx: clientCtx,
+		query:     &QueryClient{clientCtx: clientCtx},
+		tx:        &TxClient{clientCtx: clientCtx},
+	}
+}
+
+// Context returns the client context
+func (c *NodeClient) Context() sdkclient.Context {
+	return c.clientCtx
+}
+
+// GetContext returns the Go context
+func (c *NodeClient) GetContext() context.Context {
+	return c.ctx
+}
+
+// Query returns the query client
+func (c *NodeClient) Query() *QueryClient {
+	return c.query
+}
+
+// Tx returns the transaction client
+func (c *NodeClient) Tx() *TxClient {
+	return c.tx
 }
 
 // buildAkashProviderConfiguration converts AkashConfiguration to AkashProviderConfiguration with constants for defaults
@@ -170,11 +383,12 @@ func NewFromManagedResource(ctx context.Context, kubeClient client.Client, usage
 	config := buildAkashProviderConfiguration(pcInfo.Configuration)
 
 	client := &AkashClient{
-		ctx:             ctx,
-		Config:          config,
-		kubeClient:      kubeClient,
-		managedResource: mg,
-		usage:           usage,
+		ctx:               ctx,
+		Config:            config,
+		kubeClient:        kubeClient,
+		managedResource:   mg,
+		usage:             usage,
+		sentDeploymentIDs: make(map[string]bool),
 		credentialCache: &credentialCache{
 			ttl: 5 * time.Minute, // Default TTL for credential cache
 		},
@@ -339,7 +553,7 @@ func (ak *AkashClient) SetCredentialCacheTTL(ttl time.Duration) {
 }
 
 // getNodeClient creates and returns an Akash node client using the stored credentials
-func (ak *AkashClient) getNodeClient() (akashclient.Client, error) {
+func (ak *AkashClient) getNodeClient() (*NodeClient, error) {
 	creds, err := ak.GetCredentials()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get credentials: %w", err)
@@ -349,34 +563,32 @@ func (ak *AkashClient) getNodeClient() (akashclient.Client, error) {
 		return nil, fmt.Errorf("no credentials available")
 	}
 
-	// Configure Akash Bech32 prefixes
-	sdkConfig := sdktypes.GetConfig()
-	sdkConfig.SetBech32PrefixForAccount("akash", "akashpub")
-	sdkConfig.SetBech32PrefixForValidator("akashvaloper", "akashvaloperpub")
-	sdkConfig.SetBech32PrefixForConsensusNode("akashvalcons", "akashvalconspub")
-
-	// Create standard cosmos codec for keyring operations
-	interfaceRegistry := types.NewInterfaceRegistry()
-	
-	// Register core SDK interfaces
-	std.RegisterInterfaces(interfaceRegistry)
-	sdktypes.RegisterInterfaces(interfaceRegistry)
-	
-	// Register module basics interfaces
-	moduleBasics := module.NewBasicManager(
+	// Create encoding configuration using cosmos-sdk directly
+	// since akash-api types may have version incompatibility
+	encodingConfig := makeEncodingConfig(
 		auth.AppModuleBasic{},
 		bank.AppModuleBasic{},
 	)
-	moduleBasics.RegisterInterfaces(interfaceRegistry)
+	// Register cosmos-sdk interfaces
+	std.RegisterInterfaces(encodingConfig.InterfaceRegistry)
 	
-	cdc := codec.NewProtoCodec(interfaceRegistry)
+	// Register auth module types specifically for account handling
+	authtypes.RegisterInterfaces(encodingConfig.InterfaceRegistry)
 	
-	// Create transaction config with proper sign mode
-	txConfig := tx.NewTxConfig(cdc, tx.DefaultSignModes)
+	// Register bank module types  
+	banktypes.RegisterInterfaces(encodingConfig.InterfaceRegistry)
 	
+	// Register staking module types (may be needed for account queries)
+	stakingtypes.RegisterInterfaces(encodingConfig.InterfaceRegistry)
+
+	// Use the properly configured codec from Akash
+	cdc := encodingConfig.Codec
+	txConfig := encodingConfig.TxConfig
+	interfaceRegistry := encodingConfig.InterfaceRegistry
+
 	// Create account retriever for querying account info
 	accountRetriever := authtypes.AccountRetriever{}
-	
+
 	// Create RPC client for node communication with configurable TLS verification
 	httpClient := &http.Client{
 		Transport: &http.Transport{
@@ -385,12 +597,12 @@ func (ak *AkashClient) getNodeClient() (akashclient.Client, error) {
 			},
 		},
 	}
-	rpcClient, err := rpchttp.NewWithClient(ak.Config.Node, "", httpClient)
+	rpcClient, err := rpchttp.NewWithClient(ak.Config.Node, "/websocket", httpClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create RPC client: %w", err)
 	}
-	
-	kr := keyring.NewInMemory(cdc)
+
+	kr := keyring.NewInMemory()
 
 	passphrase := ""
 	if len(ak.Config.Passphrase) > 0 {
@@ -421,17 +633,21 @@ func (ak *AkashClient) getNodeClient() (akashclient.Client, error) {
 		WithViper("")
 
 	if ak.Config.AccountAddress != "" {
-		addr, err := sdktypes.AccAddressFromBech32(ak.Config.AccountAddress)
+		// Validate that the address uses the Akash prefix
+		if !strings.HasPrefix(ak.Config.AccountAddress, Bech32PrefixAccAddr) {
+			return nil, fmt.Errorf("account address must use Akash prefix '%s', got: %s", Bech32PrefixAccAddr, ak.Config.AccountAddress)
+		}
+
+		// Parse the account address directly using SDK types
+		accAddr, err := sdktypes.AccAddressFromBech32(ak.Config.AccountAddress)
 		if err != nil {
 			return nil, fmt.Errorf("invalid account address %s: %w", ak.Config.AccountAddress, err)
 		}
-		clientCtx = clientCtx.WithFromAddress(addr)
+		clientCtx = clientCtx.WithFromAddress(accAddr)
 	}
 
-	client, err := akashclient.NewClient(ak.ctx, clientCtx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create akash client: %w", err)
-	}
+	// Create node client wrapper around the clientCtx
+	client := NewNodeClient(ak.ctx, clientCtx)
 
 	return client, nil
 }

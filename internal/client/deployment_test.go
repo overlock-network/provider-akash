@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	clienttypes "github.com/overlock-network/provider-akash/internal/client/types"
-	deploymenttypes "pkg.akt.dev/go/node/deployment/v1beta4"
+	deploymenttypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 )
 
 func TestParseSDLToGroupSpecs(t *testing.T) {
@@ -89,10 +89,10 @@ deployment:
 					t.Errorf("Expected price amount %s, got %v", expectedAmount, resource.Price.Amount.String())
 				}
 
-				// Check CPU resources (0.5 cores = 500,000 microunits)
-				expectedCPU := uint64(500000)
+				// Check CPU resources (0.5 cores = 500 millicores)
+				expectedCPU := uint64(500)
 				if resource.Resources.CPU.Units.Val.Uint64() != expectedCPU {
-					t.Errorf("Expected CPU %d microunits, got %d", expectedCPU, resource.Resources.CPU.Units.Val.Uint64())
+					t.Errorf("Expected CPU %d millicores, got %d", expectedCPU, resource.Resources.CPU.Units.Val.Uint64())
 				}
 
 				// Check memory (512Mi = 536,870,912 bytes)
@@ -245,19 +245,19 @@ func TestParseResourceValue(t *testing.T) {
 		{
 			name:     "integer cores",
 			input:    "2",
-			expected: 2000000, // 2 cores = 2,000,000 microunits
+			expected: 2000, // 2 cores = 2,000 millicores
 			wantErr:  false,
 		},
 		{
 			name:     "fractional cores",
 			input:    "0.5",
-			expected: 500000, // 0.5 cores = 500,000 microunits
+			expected: 500, // 0.5 cores = 500 millicores
 			wantErr:  false,
 		},
 		{
 			name:     "millicores",
 			input:    "100m",
-			expected: 100000, // 100m cores = 100,000 microunits
+			expected: 100, // 100m cores = 100 millicores
 			wantErr:  false,
 		},
 		{
@@ -561,8 +561,8 @@ func TestSDLResourceConversion(t *testing.T) {
 					t.Errorf("Resource conversion failed: %v", conversionErr)
 					return
 				}
-				// Check CPU: 2 cores = 2,000,000 microunits
-				expectedCPU := uint64(2000000)
+				// Check CPU: 2 cores = 2,000 millicores
+				expectedCPU := uint64(2000)
 				if convertedResources.CPU.Units.Val.Uint64() != expectedCPU {
 					t.Errorf("Expected CPU %d, got %d", expectedCPU, convertedResources.CPU.Units.Val.Uint64())
 				}

@@ -9,3 +9,4 @@ cover.out
 .DS_Store
 .claude
 CLAUDE.md
+cmd/provider/provider

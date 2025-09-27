@@ -23,6 +23,7 @@ import (
 	"github.com/overlock-network/provider-akash/internal/controller/activebid"
 	"github.com/overlock-network/provider-akash/internal/controller/config"
 	"github.com/overlock-network/provider-akash/internal/controller/deployment"
+	"github.com/overlock-network/provider-akash/internal/controller/sdl"
 )
 
 // Setup creates all Akash controllers with the supplied logger and adds them to
@@ -30,6 +31,7 @@ import (
 func Setup(mgr ctrl.Manager, o controller.Options) error {
 	for _, setup := range []func(ctrl.Manager, controller.Options) error{
 		config.Setup,
+		sdl.Setup,
 		deployment.Setup,
 		activebid.Setup,
 	} {

@@ -1,37 +1,3 @@
-apiVersion: v1
-kind: Secret
-metadata:
-  name: example-provider-secret
-type: Opaque
-data:
-  credentials: "RVhBTVBMRQo="
-
----
-
-apiVersion: akash.web7.md/v1alpha1
-kind: ProviderConfig
-metadata:
-  name: example
-spec:
-  credentials:
-    source: Secret
-    secretRef:
-      namespace: default
-      name: example-provider-secret
-      key: credentials
-  configuration:
-    keyName: "default"
-    keyringBackend: "test"
-    net: "mainnet"
-    version: "0.18.0"
-    chainId: "akashnet-2"
-    node: "https://rpc.akashnet.io:443"
-    home: "/tmp/.akash"
-    path: "/usr/local/bin/akash"
-    providersApi: "https://akash-api.polkachu.com"
-
----
-
 apiVersion: akash.overlock.network/v1alpha1
 kind: SDL
 metadata:

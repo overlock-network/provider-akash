@@ -95,14 +95,22 @@ spec:
                     maximum: 1000000000000
                     minimum: 500000
                     type: integer
-                  sdl:
-                    description: SDL contains the Akash Stack Definition Language
-                      (SDL) deployment manifest as YAML string
-                    maxLength: 1048576
-                    minLength: 10
-                    type: string
+                  sdlRef:
+                    description: SDLRef references an SDL custom resource containing
+                      the deployment manifest
+                    properties:
+                      name:
+                        description: Name is the name of the SDL resource
+                        type: string
+                      namespace:
+                        description: Namespace is the namespace of the SDL resource
+                          (defaults to same namespace as Deployment)
+                        type: string
+                    required:
+                    - name
+                    type: object
                 required:
-                - sdl
+                - sdlRef
                 type: object
               managementPolicies:
                 default:
