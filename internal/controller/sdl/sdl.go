@@ -188,9 +188,15 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	return managed.ExternalUpdate{}, err
 }
 
-func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
-	// SDL is a configuration resource, no external cleanup needed
+// Disconnect is called when the ExternalClient is no longer needed
+func (c *external) Disconnect(ctx context.Context) error {
+	// No cleanup needed for now
 	return nil
+}
+
+func (c *external) Delete(ctx context.Context, mg resource.Managed) (managed.ExternalDelete, error) {
+	// SDL is a configuration resource, no external cleanup needed
+	return managed.ExternalDelete{}, nil
 }
 
 func (c *external) validateSDL(ctx context.Context, cr *v1alpha1.SDL) (managed.ExternalCreation, error) {

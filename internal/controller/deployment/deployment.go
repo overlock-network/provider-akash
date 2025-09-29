@@ -424,10 +424,46 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalUpdate{}, errors.New(errNoExternalName)
 	}
 
+	// Get owner address
+	owner := c.service.client.Config.AccountAddress
+	if owner == "" {
+		return managed.ExternalUpdate{}, errors.New(errNoOwnerAddress)
+	}
+
 	// Resolve SDL content from either direct SDL or SDLRef
 	sdlContent, err := c.resolveSDLContent(ctx, cr)
 	if err != nil {
 		return managed.ExternalUpdate{}, errors.Wrap(err, "failed to resolve SDL content")
+	}
+
+	// Generate hash from desired SDL content
+	desiredHash := generateSDLHashHex(sdlContent)
+
+	// Query current deployment to compare hashes
+	fmt.Printf("Querying deployment %s to check if update is needed\n", dseq)
+	deployment, err := c.service.client.GetDeployment(ctx, dseq, owner)
+	if err != nil {
+		// If we can't query the deployment, log and proceed with update
+		fmt.Printf("Warning: Could not query deployment for comparison: %v\n", err)
+		fmt.Printf("Proceeding with update to be safe\n")
+	} else {
+		// Compare hashes to determine if update is needed
+		currentHash := deployment.DeploymentInfo.Hash
+		fmt.Printf("Hash comparison - Current: %s, Desired: %s\n", currentHash, desiredHash)
+		
+		if currentHash == desiredHash {
+			fmt.Printf("SDL hashes match, no update needed - skipping transaction\n")
+			// Return success without sending transaction
+			return managed.ExternalUpdate{
+				ConnectionDetails: managed.ConnectionDetails{
+					"deploymentId": []byte(dseq),
+					"dseq":         []byte(dseq),
+					"owner":        []byte(owner),
+				},
+			}, nil
+		}
+		
+		fmt.Printf("SDL hashes differ, proceeding with update\n")
 	}
 
 	fmt.Printf("Updating deployment %s with SDL content (length: %d)\n", dseq, len(sdlContent))
@@ -445,17 +481,22 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 		ConnectionDetails: managed.ConnectionDetails{
 			"deploymentId": []byte(dseq),
 			"dseq":         []byte(dseq),
-			"owner":        []byte(c.service.client.Config.AccountAddress),
-			"lastUpdated":  []byte(fmt.Sprintf("%d", ctx.Value("timestamp"))),
+			"owner":        []byte(owner),
 		},
 	}, nil
 }
 
+// Disconnect is called when the ExternalClient is no longer needed
+func (c *external) Disconnect(ctx context.Context) error {
+	// No cleanup needed for now
+	return nil
+}
+
 // Delete closes/terminates a deployment on the Akash network using the CloseDeployment client method
-func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
+func (c *external) Delete(ctx context.Context, mg resource.Managed) (managed.ExternalDelete, error) {
 	cr, ok := mg.(*v1alpha1.Deployment)
 	if !ok {
-		return errors.New(errNotDeployment)
+		return managed.ExternalDelete{}, errors.New(errNotDeployment)
 	}
 
 	fmt.Printf("Deleting deployment: %s\n", cr.Name)
@@ -467,16 +508,16 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 		dseq = externalName["crossplane.io/external-name"]
 	}
 
-	// If no external name, deployment was never created or already deleted
-	if dseq == "" {
-		fmt.Printf("No external-name found, deployment already deleted or never created\n")
-		return nil
+	// If no external name or it's just the resource name, deployment was never created
+	if dseq == "" || dseq == cr.Name {
+		fmt.Printf("No valid external deployment ID found, allowing deletion\n")
+		return managed.ExternalDelete{}, nil
 	}
 
 	// Use the account address from the client configuration as the owner
 	owner := c.service.client.Config.AccountAddress
 	if owner == "" {
-		return errors.New(errNoOwnerAddress)
+		return managed.ExternalDelete{}, errors.New(errNoOwnerAddress)
 	}
 
 	fmt.Printf("Closing deployment with DSEQ: %s, Owner: %s\n", dseq, owner)
@@ -488,13 +529,16 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 		// Don't return error for already closed deployments to allow cleanup
 		if isDeploymentNotFoundError(err) {
 			fmt.Printf("Deployment %s not found, assuming already closed\n", dseq)
-			return nil
+			return managed.ExternalDelete{}, nil
 		}
-		return errors.Wrap(err, errDeleteDeployment)
+		// Return error to prevent deletion if transaction failed
+		return managed.ExternalDelete{}, errors.Wrap(err, errDeleteDeployment)
 	}
 
-	fmt.Printf("Successfully closed deployment %s\n", dseq)
-	return nil
+	// Transaction sent successfully - deployment is considered closed
+	// Allow deletion immediately to avoid spending coins on retries
+	fmt.Printf("Successfully sent close deployment transaction for %s, allowing deletion\n", dseq)
+	return managed.ExternalDelete{}, nil
 }
 
 // isDeploymentNotFoundError checks if the error indicates the deployment was not found
