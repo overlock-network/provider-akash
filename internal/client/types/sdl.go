@@ -55,7 +55,7 @@ type SDLComputeProfile struct {
 type SDLResources struct {
 	CPU     SDLResourceCPU     `yaml:"cpu"`
 	Memory  SDLResourceMemory  `yaml:"memory"`
-	Storage SDLResourceStorage `yaml:"storage"`
+	Storage SDLResourceStorage `yaml:"storage,omitempty"`
 }
 
 // SDLResourceCPU defines CPU resource requirements
@@ -63,14 +63,95 @@ type SDLResourceCPU struct {
 	Units string `yaml:"units"`
 }
 
+// UnmarshalYAML implements custom YAML unmarshaling for CPU resources
+func (c *SDLResourceCPU) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	// Try to unmarshal as a string first (simple format)
+	var units string
+	if err := unmarshal(&units); err == nil {
+		c.Units = units
+		return nil
+	}
+	
+	// Fall back to structured format
+	var structured struct {
+		Units string `yaml:"units"`
+	}
+	if err := unmarshal(&structured); err != nil {
+		return err
+	}
+	c.Units = structured.Units
+	return nil
+}
+
 // SDLResourceMemory defines memory resource requirements
 type SDLResourceMemory struct {
 	Size string `yaml:"size"`
 }
 
+// UnmarshalYAML implements custom YAML unmarshaling for memory resources
+func (m *SDLResourceMemory) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	// Try to unmarshal as a string first (simple format)
+	var size string
+	if err := unmarshal(&size); err == nil {
+		m.Size = size
+		return nil
+	}
+	
+	// Fall back to structured format
+	var structured struct {
+		Size string `yaml:"size"`
+	}
+	if err := unmarshal(&structured); err != nil {
+		return err
+	}
+	m.Size = structured.Size
+	return nil
+}
+
 // SDLResourceStorage defines storage resource requirements
 type SDLResourceStorage struct {
-	Size string `yaml:"size"`
+	Size  string `yaml:"size"`
+	Class string `yaml:"class,omitempty"`
+}
+
+// UnmarshalYAML implements custom YAML unmarshaling for storage resources
+func (s *SDLResourceStorage) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	// Try to unmarshal as a string first (simple format)
+	var size string
+	if err := unmarshal(&size); err == nil {
+		s.Size = size
+		return nil
+	}
+	
+	// Try to unmarshal as a sequence (array format)
+	var sequence []interface{}
+	if err := unmarshal(&sequence); err == nil {
+		if len(sequence) > 0 {
+			if sizeStr, ok := sequence[0].(string); ok {
+				s.Size = sizeStr
+			}
+		}
+		return nil
+	}
+	
+	// Fall back to structured format
+	var structured struct {
+		Size  string `yaml:"size"`
+		Class string `yaml:"class,omitempty"`
+	}
+	if err := unmarshal(&structured); err != nil {
+		return err
+	}
+	s.Size = structured.Size
+	s.Class = structured.Class
+	return nil
+}
+
+// SDLStorage defines storage requirements
+type SDLStorage struct {
+	Name  string `yaml:"name,omitempty"`
+	Size  string `yaml:"size"`
+	Class string `yaml:"class,omitempty"`
 }
 
 // SDLPlacementProfile defines placement constraints and pricing

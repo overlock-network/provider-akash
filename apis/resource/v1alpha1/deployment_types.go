@@ -35,11 +35,9 @@ const (
 
 // DeploymentParameters are the configurable fields of a Deployment.
 type DeploymentParameters struct {
-	// SDL contains the Akash Stack Definition Language (SDL) deployment manifest as YAML string
+	// SDLRef references an SDL custom resource containing the deployment manifest
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=10
-	// +kubebuilder:validation:MaxLength=1048576
-	SDL string `json:"sdl"`
+	SDLRef SDLReference `json:"sdlRef"`
 
 	// Deposit is the deployment deposit amount in uakt (minimum 500000, default 5000000)
 	// +kubebuilder:validation:Minimum=500000
@@ -51,6 +49,17 @@ type DeploymentParameters struct {
 	// +kubebuilder:validation:Enum=uakt;akt
 	// +kubebuilder:default="uakt"
 	Currency *string `json:"currency,omitempty"`
+}
+
+// SDLReference references an SDL resource
+type SDLReference struct {
+	// Name is the name of the SDL resource
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
+	// Namespace is the namespace of the SDL resource (defaults to same namespace as Deployment)
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
 }
 
 

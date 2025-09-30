@@ -6,46 +6,10 @@ spec:
   providerConfigRef:
     name: sandbox
   forProvider:
-    # SDL (Stack Definition Language) for the Akash deployment
-    sdl: |
-      version: "2.0"
-      
-      services:
-        web:
-          image: nginx:latest
-          expose:
-            - port: 80
-              as: 80
-              to:
-                - global: true
-      
-      profiles:
-        compute:
-          web-profile:
-            resources:
-              cpu:
-                units: 0.5
-              memory:
-                size: 512Mi
-              storage:
-                size: 1Gi
-        placement:
-          akash:
-            attributes:
-              host: akash
-            signedBy:
-              anyOf:
-                - "akash1365yvmc4s7awdyj3n2sav7xfx76adc6dnmlx63"
-            pricing:
-              web: 
-                denom: uakt
-                amount: 100
-      
-      deployment:
-        web:
-          akash:
-            profile: web-profile
-            count: 1
+    # Reference to SDL custom resource
+    sdlRef:
+      name: simple-web-app
+      namespace: default
 
     # Deployment deposit in uakt (5 AKT = 5,000,000 uakt)
     deposit: 5000000

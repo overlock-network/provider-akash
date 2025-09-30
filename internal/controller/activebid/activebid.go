@@ -297,16 +297,22 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	}, nil
 }
 
+// Disconnect is called when the ExternalClient is no longer needed
+func (c *external) Disconnect(ctx context.Context) error {
+	// No cleanup needed for now
+	return nil
+}
+
 // Delete is a no-op for ActiveBids since they are observations, not resources we create
-func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
+func (c *external) Delete(ctx context.Context, mg resource.Managed) (managed.ExternalDelete, error) {
 	cr, ok := mg.(*akashv1alpha1.ActiveBid)
 	if !ok {
-		return errors.New(errNotActiveBid)
+		return managed.ExternalDelete{}, errors.New(errNotActiveBid)
 	}
 
 	fmt.Printf("Deleting ActiveBid observation: %s\n", cr.Name)
 	// Nothing to delete - ActiveBids are observations of the Akash network state
-	return nil
+	return managed.ExternalDelete{}, nil
 }
 
 // getReferencedDeployment retrieves the Deployment CR referenced by the ActiveBid
