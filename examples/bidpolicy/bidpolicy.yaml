@@ -1,0 +1,25 @@
+apiVersion: akash.overlock.network/v1alpha1
+kind: BidPolicy
+metadata:
+  name: web-app-bidpolicy
+  namespace: default
+spec:
+  providerConfigRef:
+    name: default
+  forProvider:
+    selector:
+      matchLabels:
+        app: web-server
+        tier: frontend
+    maxPrice: 500
+    excludedProviders:
+      - "akash1badprovideraddress..."
+    minProviderScore: 75
+    requiredAttributes:
+      - key: "region"
+        value: "us-west"
+      - key: "tier"
+        value: "premium"
+    selectionStrategy: "lowest-price"
+    autoAccept: true
+    maxBids: 15
