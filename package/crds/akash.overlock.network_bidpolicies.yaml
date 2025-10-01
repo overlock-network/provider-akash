@@ -1,0 +1,616 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.0
+  name: bidpolicies.akash.overlock.network
+spec:
+  group: akash.overlock.network
+  names:
+    categories:
+    - crossplane
+    - managed
+    - akash
+    kind: BidPolicy
+    listKind: BidPolicyList
+    plural: bidpolicies
+    singular: bidpolicy
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: READY
+      type: string
+    - jsonPath: .status.conditions[?(@.type=='Synced')].status
+      name: SYNCED
+      type: string
+    - jsonPath: .status.atProvider.state
+      name: STATE
+      type: string
+    - jsonPath: .spec.forProvider.deploymentRef.name
+      name: DEPLOYMENT
+      type: string
+    - jsonPath: .spec.forProvider.autoAccept
+      name: AUTO-ACCEPT
+      type: boolean
+    - jsonPath: .status.atProvider.selectedBid.bidId
+      name: SELECTED-BID
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: AGE
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: A BidPolicy defines bid selection policies for Akash deployments.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: A BidPolicySpec defines the desired state of a BidPolicy.
+            properties:
+              deletionPolicy:
+                default: Delete
+                description: |-
+                  DeletionPolicy specifies what will happen to the underlying external
+                  when this managed resource is deleted - either "Delete" or "Orphan" the
+                  external resource.
+                  This field is planned to be deprecated in favor of the ManagementPolicies
+                  field in a future release. Currently, both could be set independently and
+                  non-default values would be honored if the feature flag is enabled.
+                  See the design doc for more information: https://github.com/crossplane/crossplane/blob/499895a25d1a1a0ba1604944ef98ac7a1a71f197/design/design-doc-observe-only-resources.md?plain=1#L223
+                enum:
+                - Orphan
+                - Delete
+                type: string
+              forProvider:
+                description: BidPolicyParameters are the configurable fields of a
+                  BidPolicy.
+                properties:
+                  autoAccept:
+                    default: false
+                    description: AutoAccept enables automatic lease creation when
+                      bids are selected
+                    type: boolean
+                  deploymentRef:
+                    description: DeploymentRef references a specific deployment (overrides
+                      selector)
+                    properties:
+                      name:
+                        description: Name of the Deployment resource
+                        type: string
+                      namespace:
+                        description: Namespace of the Deployment resource (optional,
+                          defaults to same namespace)
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  excludedProviders:
+                    description: ExcludedProviders is a list of provider addresses
+                      to exclude
+                    items:
+                      type: string
+                    type: array
+                  maxBids:
+                    default: 10
+                    description: MaxBids is the maximum number of bids to wait for
+                      before selection
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                  maxPrice:
+                    description: MaxPrice is the maximum acceptable price per block
+                      in uAKT
+                    format: int64
+                    minimum: 1
+                    type: integer
+                  minProviderScore:
+                    description: MinProviderScore is the minimum provider reputation
+                      score (0-100)
+                    format: int32
+                    maximum: 100
+                    minimum: 0
+                    type: integer
+                  preferredProviders:
+                    description: PreferredProviders is a list of preferred provider
+                      addresses (higher priority)
+                    items:
+                      type: string
+                    type: array
+                  requiredAttributes:
+                    description: RequiredAttributes is a list of required provider
+                      attributes
+                    items:
+                      description: ProviderAttribute defines a required provider attribute
+                      properties:
+                        key:
+                          description: Key is the attribute key (e.g., "region", "tier",
+                            "features")
+                          type: string
+                        value:
+                          description: Value is the required attribute value
+                          type: string
+                      required:
+                      - key
+                      - value
+                      type: object
+                    type: array
+                  selectionStrategy:
+                    default: lowest-price
+                    description: SelectionStrategy defines how to select from qualifying
+                      bids
+                    enum:
+                    - lowest-price
+                    - best-score
+                    - preferred-first
+                    type: string
+                  selector:
+                    description: Selector defines label selector to match Deployment
+                      CRs
+                    properties:
+                      matchExpressions:
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
+                        items:
+                          description: |-
+                            A label selector requirement is a selector that contains values, a key, and an operator that
+                            relates the key and values.
+                          properties:
+                            key:
+                              description: key is the label key that the selector
+                                applies to.
+                              type: string
+                            operator:
+                              description: |-
+                                operator represents a key's relationship to a set of values.
+                                Valid operators are In, NotIn, Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: |-
+                                values is an array of string values. If the operator is In or NotIn,
+                                the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                the values array must be empty. This array is replaced during a strategic
+                                merge patch.
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        type: array
+                        x-kubernetes-list-type: atomic
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                          map is equivalent to an element of matchExpressions, whose key field is "key", the
+                          operator is "In", and the values array contains only "value". The requirements are ANDed.
+                        type: object
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  waitTime:
+                    default: 120
+                    description: |-
+                      WaitTime is deprecated. Bid collection timing is now managed automatically
+                      using Kubernetes controller-runtime mechanisms based on deployment creation time.
+                    format: int32
+                    maximum: 3600
+                    minimum: 10
+                    type: integer
+                type: object
+              managementPolicies:
+                default:
+                - '*'
+                description: |-
+                  THIS IS A BETA FIELD. It is on by default but can be opted out
+                  through a Crossplane feature flag.
+                  ManagementPolicies specify the array of actions Crossplane is allowed to
+                  take on the managed and external resources.
+                  This field is planned to replace the DeletionPolicy field in a future
+                  release. Currently, both could be set independently and non-default
+                  values would be honored if the feature flag is enabled. If both are
+                  custom, the DeletionPolicy field will be ignored.
+                  See the design doc for more information: https://github.com/crossplane/crossplane/blob/499895a25d1a1a0ba1604944ef98ac7a1a71f197/design/design-doc-observe-only-resources.md?plain=1#L223
+                  and this one: https://github.com/crossplane/crossplane/blob/444267e84783136daa93568b364a5f01228cacbe/design/one-pager-ignore-changes.md
+                items:
+                  description: |-
+                    A ManagementAction represents an action that the Crossplane controllers
+                    can take on an external resource.
+                  enum:
+                  - Observe
+                  - Create
+                  - Update
+                  - Delete
+                  - LateInitialize
+                  - '*'
+                  type: string
+                type: array
+              providerConfigRef:
+                default:
+                  name: default
+                description: |-
+                  ProviderConfigReference specifies how the provider that will be used to
+                  create, observe, update, and delete this managed resource should be
+                  configured.
+                properties:
+                  name:
+                    description: Name of the referenced object.
+                    type: string
+                  policy:
+                    description: Policies for referencing.
+                    properties:
+                      resolution:
+                        default: Required
+                        description: |-
+                          Resolution specifies whether resolution of this reference is required.
+                          The default is 'Required', which means the reconcile will fail if the
+                          reference cannot be resolved. 'Optional' means this reference will be
+                          a no-op if it cannot be resolved.
+                        enum:
+                        - Required
+                        - Optional
+                        type: string
+                      resolve:
+                        description: |-
+                          Resolve specifies when this reference should be resolved. The default
+                          is 'IfNotPresent', which will attempt to resolve the reference only when
+                          the corresponding field is not present. Use 'Always' to resolve the
+                          reference on every reconcile.
+                        enum:
+                        - Always
+                        - IfNotPresent
+                        type: string
+                    type: object
+                required:
+                - name
+                type: object
+              publishConnectionDetailsTo:
+                description: |-
+                  PublishConnectionDetailsTo specifies the connection secret config which
+                  contains a name, metadata and a reference to secret store config to
+                  which any connection details for this managed resource should be written.
+                  Connection details frequently include the endpoint, username,
+                  and password required to connect to the managed resource.
+                properties:
+                  configRef:
+                    default:
+                      name: default
+                    description: |-
+                      SecretStoreConfigRef specifies which secret store config should be used
+                      for this ConnectionSecret.
+                    properties:
+                      name:
+                        description: Name of the referenced object.
+                        type: string
+                      policy:
+                        description: Policies for referencing.
+                        properties:
+                          resolution:
+                            default: Required
+                            description: |-
+                              Resolution specifies whether resolution of this reference is required.
+                              The default is 'Required', which means the reconcile will fail if the
+                              reference cannot be resolved. 'Optional' means this reference will be
+                              a no-op if it cannot be resolved.
+                            enum:
+                            - Required
+                            - Optional
+                            type: string
+                          resolve:
+                            description: |-
+                              Resolve specifies when this reference should be resolved. The default
+                              is 'IfNotPresent', which will attempt to resolve the reference only when
+                              the corresponding field is not present. Use 'Always' to resolve the
+                              reference on every reconcile.
+                            enum:
+                            - Always
+                            - IfNotPresent
+                            type: string
+                        type: object
+                    required:
+                    - name
+                    type: object
+                  metadata:
+                    description: Metadata is the metadata for connection secret.
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          Annotations are the annotations to be added to connection secret.
+                          - For Kubernetes secrets, this will be used as "metadata.annotations".
+                          - It is up to Secret Store implementation for others store types.
+                        type: object
+                      labels:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          Labels are the labels/tags to be added to connection secret.
+                          - For Kubernetes secrets, this will be used as "metadata.labels".
+                          - It is up to Secret Store implementation for others store types.
+                        type: object
+                      type:
+                        description: |-
+                          Type is the SecretType for the connection secret.
+                          - Only valid for Kubernetes Secret Stores.
+                        type: string
+                    type: object
+                  name:
+                    description: Name is the name of the connection secret.
+                    type: string
+                required:
+                - name
+                type: object
+              writeConnectionSecretToRef:
+                description: |-
+                  WriteConnectionSecretToReference specifies the namespace and name of a
+                  Secret to which any connection details for this managed resource should
+                  be written. Connection details frequently include the endpoint, username,
+                  and password required to connect to the managed resource.
+                  This field is planned to be replaced in a future release in favor of
+                  PublishConnectionDetailsTo. Currently, both could be set independently
+                  and connection details would be published to both without affecting
+                  each other.
+                properties:
+                  name:
+                    description: Name of the secret.
+                    type: string
+                  namespace:
+                    description: Namespace of the secret.
+                    type: string
+                required:
+                - name
+                - namespace
+                type: object
+            required:
+            - forProvider
+            type: object
+          status:
+            description: A BidPolicyStatus represents the observed state of a BidPolicy.
+            properties:
+              atProvider:
+                description: BidPolicyObservation are the observable fields of a BidPolicy.
+                properties:
+                  activeBidsManaged:
+                    description: ActiveBidsManaged is a list of ActiveBid CRs being
+                      managed
+                    items:
+                      description: ActiveBidReference contains a reference to an ActiveBid
+                        resource
+                      properties:
+                        bidId:
+                          description: BidId is the bid ID associated with this ActiveBid
+                          type: string
+                        createdAt:
+                          description: CreatedAt is when this ActiveBid was created
+                          format: date-time
+                          type: string
+                        name:
+                          description: Name is the name of the ActiveBid resource
+                          type: string
+                        namespace:
+                          description: Namespace is the namespace of the ActiveBid
+                            resource
+                          type: string
+                        price:
+                          description: Price is the bid price in uAKT
+                          format: int64
+                          type: integer
+                        provider:
+                          description: Provider is the provider address for this bid
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                  createdLeases:
+                    additionalProperties:
+                      description: LeaseReference contains a reference to a Lease
+                        resource
+                      properties:
+                        createdAt:
+                          description: CreatedAt is when this Lease was created
+                          format: date-time
+                          type: string
+                        leaseId:
+                          description: LeaseId is the lease ID from Akash
+                          type: string
+                        name:
+                          description: Name is the name of the Lease resource
+                          type: string
+                        namespace:
+                          description: Namespace is the namespace of the Lease resource
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    description: CreatedLeases is a map of deployment to created Lease
+                      CR reference
+                    type: object
+                  eligibleBids:
+                    description: EligibleBids is the number of bids meeting criteria
+                    format: int32
+                    type: integer
+                  lastEvaluated:
+                    description: LastEvaluated is the timestamp of last evaluation
+                    format: date-time
+                    type: string
+                  matchedDeployments:
+                    description: MatchedDeployments is a list of Deployment CRs matched
+                      by selector
+                    items:
+                      description: DeploymentReference represents a reference to a
+                        Deployment resource
+                      properties:
+                        name:
+                          description: Name of the Deployment resource
+                          type: string
+                        namespace:
+                          description: Namespace of the Deployment resource (optional,
+                            defaults to same namespace)
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                  rejectedBids:
+                    description: RejectedBids is a list of rejected bids with reasons
+                    items:
+                      description: RejectedBidInfo contains information about a rejected
+                        bid
+                      properties:
+                        bidId:
+                          description: BidId is the unique identifier of the rejected
+                            bid
+                          type: string
+                        price:
+                          description: Price is the bid price in uAKT
+                          format: int64
+                          type: integer
+                        provider:
+                          description: Provider is the address of the provider
+                          type: string
+                        rejectedAt:
+                          description: RejectedAt is when this bid was rejected
+                          format: date-time
+                          type: string
+                        rejectionReason:
+                          description: RejectionReason is why this bid was rejected
+                          type: string
+                      required:
+                      - bidId
+                      - price
+                      - provider
+                      - rejectedAt
+                      - rejectionReason
+                      type: object
+                    type: array
+                  selectedBids:
+                    additionalProperties:
+                      description: ActiveBidReference contains a reference to an ActiveBid
+                        resource
+                      properties:
+                        bidId:
+                          description: BidId is the bid ID associated with this ActiveBid
+                          type: string
+                        createdAt:
+                          description: CreatedAt is when this ActiveBid was created
+                          format: date-time
+                          type: string
+                        name:
+                          description: Name is the name of the ActiveBid resource
+                          type: string
+                        namespace:
+                          description: Namespace is the namespace of the ActiveBid
+                            resource
+                          type: string
+                        price:
+                          description: Price is the bid price in uAKT
+                          format: int64
+                          type: integer
+                        provider:
+                          description: Provider is the provider address for this bid
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    description: SelectedBids is a map of deployment to selected ActiveBid
+                      CR reference
+                    type: object
+                  selectionReasons:
+                    additionalProperties:
+                      type: string
+                    description: SelectionReasons is a map of deployment to reason
+                      for bid selection
+                    type: object
+                  state:
+                    description: State is the policy state (active, paused, failed)
+                    type: string
+                  totalBidsReceived:
+                    description: TotalBidsReceived is the number of bids received
+                      across all deployments
+                    format: int32
+                    type: integer
+                type: object
+              conditions:
+                description: Conditions of the resource.
+                items:
+                  description: A Condition that may apply to a resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        LastTransitionTime is the last time this condition transitioned from one
+                        status to another.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        A Message containing details about this condition's last transition from
+                        one status to another, if any.
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        ObservedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      type: integer
+                    reason:
+                      description: A Reason for this condition's last transition from
+                        one status to another.
+                      type: string
+                    status:
+                      description: Status of this condition; is it currently True,
+                        False, or Unknown?
+                      type: string
+                    type:
+                      description: |-
+                        Type of this condition. At most one of each condition type may apply to
+                        a resource at any point in time.
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the latest metadata.generation
+                  which resulted in either a ready state, or stalled due to error
+                  it can not recover from without human intervention.
+                format: int64
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

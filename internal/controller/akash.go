@@ -21,6 +21,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/overlock-network/provider-akash/internal/controller/activebid"
+	"github.com/overlock-network/provider-akash/internal/controller/bidpolicy"
 	"github.com/overlock-network/provider-akash/internal/controller/config"
 	"github.com/overlock-network/provider-akash/internal/controller/deployment"
 	"github.com/overlock-network/provider-akash/internal/controller/sdl"
@@ -34,6 +35,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		sdl.Setup,
 		deployment.Setup,
 		activebid.Setup,
+		bidpolicy.Setup,
 	} {
 		if err := setup(mgr, o); err != nil {
 			return err
