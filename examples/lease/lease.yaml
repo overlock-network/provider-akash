@@ -1,0 +1,18 @@
+apiVersion: akash.overlock.network/v1alpha1
+kind: Lease
+metadata:
+  name: web-app-lease
+  namespace: default
+spec:
+  providerConfigRef:
+    name: default
+  forProvider:
+    deploymentRef:
+      name: web-deployment
+      namespace: default
+    activeBidRef:
+      name: web-deployment-activebid
+      namespace: default
+      bidId: "akash1owner-12345-1-1-akash1provider"
+      provider: "akash1provider..."
+      price: 100
