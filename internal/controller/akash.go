@@ -22,6 +22,7 @@ import (
 
 	"github.com/overlock-network/provider-akash/internal/controller/activebid"
 	"github.com/overlock-network/provider-akash/internal/controller/bidpolicy"
+	"github.com/overlock-network/provider-akash/internal/controller/certificate"
 	"github.com/overlock-network/provider-akash/internal/controller/config"
 	"github.com/overlock-network/provider-akash/internal/controller/deployment"
 	"github.com/overlock-network/provider-akash/internal/controller/lease"
@@ -38,6 +39,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		activebid.Setup,
 		bidpolicy.Setup,
 		lease.Setup,
+		certificate.Setup,
 	} {
 		if err := setup(mgr, o); err != nil {
 			return err
