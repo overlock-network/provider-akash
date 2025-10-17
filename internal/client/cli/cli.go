@@ -51,6 +51,14 @@ func (c AkashCommand) LeaseStatus() AkashCommand {
 	return c.append("lease-status")
 }
 
+func (c AkashCommand) ServiceStatus() AkashCommand {
+	return c.append("service-status")
+}
+
+func (c AkashCommand) GetManifest() AkashCommand {
+	return c.append("get-manifest")
+}
+
 func (c AkashCommand) SendManifest(path string) AkashCommand {
 	return c.append("send-manifest").append(path)
 }
@@ -103,6 +111,10 @@ func (c AkashCommand) SetGseq(gseq string) AkashCommand {
 
 func (c AkashCommand) SetProvider(provider string) AkashCommand {
 	return c.append("--provider").append(provider)
+}
+
+func (c AkashCommand) SetService(service string) AkashCommand {
+	return c.append("--service").append(service)
 }
 
 func (c AkashCommand) SetHome(home string) AkashCommand {
