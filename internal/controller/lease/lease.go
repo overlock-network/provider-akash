@@ -39,8 +39,8 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 
-	marketv1beta4 "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	providerv1 "github.com/akash-network/akash-api/go/provider/lease/v1"
+	marketv1beta4 "pkg.akt.dev/go/node/market/v1"
+	providerv1 "pkg.akt.dev/go/provider/lease/v1"
 
 	akashv1alpha1 "github.com/overlock-network/provider-akash/apis/akash/v1alpha1"
 	resourcev1alpha1 "github.com/overlock-network/provider-akash/apis/resource/v1alpha1"

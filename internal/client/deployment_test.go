@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	clienttypes "github.com/overlock-network/provider-akash/internal/client/types"
-	deploymenttypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	deploymenttypes "pkg.akt.dev/go/node/deployment/v1beta4"
 )
 
 func TestParseSDLToGroupSpecs(t *testing.T) {

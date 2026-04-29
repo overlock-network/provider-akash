@@ -12,10 +12,12 @@ import (
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
 	clienttypes "github.com/overlock-network/provider-akash/internal/client/types"
 	"gopkg.in/yaml.v3"
-	deploymenttypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
-	rtypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
-	"github.com/akash-network/akash-api/go/node/types/unit"
+	dv1 "pkg.akt.dev/go/node/deployment/v1"
+	deploymenttypes "pkg.akt.dev/go/node/deployment/v1beta4"
+	depositv1 "pkg.akt.dev/go/node/types/deposit/v1"
+	atypes "pkg.akt.dev/go/node/types/attributes/v1"
+	rtypes "pkg.akt.dev/go/node/types/resources/v1beta4"
+	"pkg.akt.dev/go/node/types/unit"
 )
 
 func (ak *AkashClient) GetDeployments(owner string) ([]clienttypes.DeploymentId, error) {
@@ -38,28 +40,14 @@ func (ak *AkashClient) GetDeployments(owner string) ([]clienttypes.DeploymentId,
 
 	var deployments []clienttypes.DeploymentId
 	for _, deploymentResp := range deploymentsResp.Deployments {
+		id := deploymentResp.Deployment.GetID()
 		deployments = append(deployments, clienttypes.DeploymentId{
-			Dseq:  fmt.Sprintf("%d", deploymentResp.Deployment.GetDeploymentID().DSeq),
-			Owner: deploymentResp.Deployment.GetDeploymentID().Owner,
+			Dseq:  fmt.Sprintf("%d", id.DSeq),
+			Owner: id.Owner,
 		})
 	}
 
 	return deployments, nil
-}
-
-// IsDeploymentTracked checks if a deployment ID was sent to the network
-func (ak *AkashClient) IsDeploymentTracked(dseq string) bool {
-	ak.mu.RLock()
-	defer ak.mu.RUnlock()
-	return ak.sentDeploymentIDs[dseq]
-}
-
-// ClearTrackedDeployment removes a deployment ID from tracking (for cleanup)
-func (ak *AkashClient) ClearTrackedDeployment(dseq string) {
-	ak.mu.Lock()
-	defer ak.mu.Unlock()
-	delete(ak.sentDeploymentIDs, dseq)
-	fmt.Printf("[DEBUG] Cleared tracking for deployment ID: %s\n", dseq)
 }
 
 // GetDeployment retrieves deployment details by DSEQ and owner
@@ -74,7 +62,7 @@ func (ak *AkashClient) GetDeployment(ctx context.Context, dseq string, owner str
 		return clienttypes.Deployment{}, fmt.Errorf("failed to get node client: %w", err)
 	}
 
-	deploymentID := deploymenttypes.DeploymentID{
+	deploymentID := dv1.DeploymentID{
 		DSeq:  dseqUint,
 		Owner: owner,
 	}
@@ -86,57 +74,32 @@ func (ak *AkashClient) GetDeployment(ctx context.Context, dseq string, owner str
 		ID: deploymentID,
 	})
 	if err != nil {
-		// Check if this deployment ID was actually sent to the network
-		ak.mu.RLock()
-		wasSent := ak.sentDeploymentIDs[dseq]
-		ak.mu.RUnlock()
-		
-		if wasSent {
-			fmt.Printf("[INFO] Deployment %s was sent to network but query failed, returning fake data: %v\n", dseq, err)
-			// Return fake deployment data to prevent controller from trying to recreate
-			return clienttypes.Deployment{
-				DeploymentInfo: clienttypes.DeploymentInfo{
-					State: "active", // Fake active state
-					DeploymentId: clienttypes.DeploymentId{
-						Dseq:  dseq,
-						Owner: owner,
-					},
-					Hash:      "fake-hash-123456789abcdef", // Fake hash
-					CreatedAt: 12574046,                   // Fake block height
-				},
-				EscrowAccount: clienttypes.EscrowAccount{
-					Owner: owner,
-					State: "open", // Fake open escrow state
-					Balance: clienttypes.EscrowAccountBalance{
-						Denom:  "uakt",
-						Amount: "5000000", // Fake 5 AKT balance
-					},
-				},
-			}, nil
-		} else {
-			fmt.Printf("[INFO] Deployment %s was not sent to network, returning actual error: %v\n", dseq, err)
-			// Return the actual error so Crossplane will try to create it
-			return clienttypes.Deployment{}, fmt.Errorf("deployment not found: %w", err)
-		}
+		return clienttypes.Deployment{}, fmt.Errorf("deployment not found: %w", err)
+	}
+
+	id := deploymentResp.Deployment.GetID()
+	escrowState := deploymentResp.EscrowAccount.State
+
+	balance := clienttypes.EscrowAccountBalance{Denom: "uakt"}
+	if len(escrowState.Funds) > 0 {
+		balance.Denom = escrowState.Funds[0].Denom
+		balance.Amount = escrowState.Funds[0].Amount.String()
 	}
 
 	return clienttypes.Deployment{
 		DeploymentInfo: clienttypes.DeploymentInfo{
 			State: deploymentResp.Deployment.State.String(),
 			DeploymentId: clienttypes.DeploymentId{
-				Dseq:  fmt.Sprintf("%d", deploymentResp.Deployment.GetDeploymentID().DSeq),
-				Owner: deploymentResp.Deployment.GetDeploymentID().Owner,
+				Dseq:  fmt.Sprintf("%d", id.DSeq),
+				Owner: id.Owner,
 			},
-			Hash:      fmt.Sprintf("%x", deploymentResp.Deployment.Version), // Convert version bytes to hex string
+			Hash:      fmt.Sprintf("%x", deploymentResp.Deployment.Hash),
 			CreatedAt: deploymentResp.Deployment.CreatedAt,
 		},
 		EscrowAccount: clienttypes.EscrowAccount{
-			Owner: deploymentResp.EscrowAccount.Owner,
-			State: deploymentResp.EscrowAccount.State.String(),
-			Balance: clienttypes.EscrowAccountBalance{
-				Denom:  deploymentResp.EscrowAccount.Balance.Denom,
-				Amount: deploymentResp.EscrowAccount.Balance.Amount.String(),
-			},
+			Owner:   escrowState.Owner,
+			State:   escrowState.State.String(),
+			Balance: balance,
 		},
 	}, nil
 }
@@ -163,51 +126,37 @@ func (ak *AkashClient) CreateDeployment(ctx context.Context, req clienttypes.Dep
 	dseq := uint64(time.Now().Unix())
 
 	msg := &deploymenttypes.MsgCreateDeployment{
-		ID: deploymenttypes.DeploymentID{
+		ID: dv1.DeploymentID{
 			Owner: ak.Config.AccountAddress,
 			DSeq:  dseq,
 		},
-		Groups:    groups,
-		Version:   generateSDLHash(req.SDL),
-		Deposit:   depositCoin,
-		Depositor: ak.Config.AccountAddress,
+		Groups: groups,
+		Hash:   generateSDLHash(req.SDL),
+		Deposit: depositv1.Deposit{
+			Amount: depositCoin,
+		},
 	}
 
-	txClient := client.Tx()
-	
-	// Validate message before attempting broadcast
 	if valErr := ValidateTransactionPreBroadcast(msg, ak.Config.AccountAddress); valErr != nil {
-		fmt.Printf("[ERROR] Pre-broadcast validation failed: %v\n", valErr)
-		// Continue anyway - still return success to prevent reconciliation loops
+		return clienttypes.Seqs{}, fmt.Errorf("pre-broadcast validation failed: %w", valErr)
 	}
 
-	// Attempt to broadcast the transaction (for development/testing)
-	resp, err := txClient.BroadcastMsgs(ak.ctx, msg)
+	resp, err := client.Tx().BroadcastMsgs(ak.ctx, msg)
 	if err != nil {
-		// Log the error but don't fail - return success to prevent ban from retries
-		debugInfo := DebugBroadcastError(err)
-		fmt.Print(debugInfo)
-		fmt.Printf("[INFO] Transaction failed but returning success to prevent reconciliation loops\n")
-	} else {
-		fmt.Printf("Create deployment transaction response: %+v\n", resp)
-		fmt.Printf("[INFO] Transaction succeeded\n")
+		fmt.Print(DebugBroadcastError(err))
+		return clienttypes.Seqs{}, fmt.Errorf("failed to broadcast MsgCreateDeployment: %w", err)
+	}
+	if resp.Code != 0 {
+		return clienttypes.Seqs{}, fmt.Errorf("MsgCreateDeployment rejected by chain: code=%d codespace=%s log=%s", resp.Code, resp.Codespace, resp.RawLog)
 	}
 
-	// Always return success with the generated DSEQ to prevent reconciliation loops
-	// This prevents getting banned from the network due to repeated failed requests
-	fmt.Printf("[INFO] Returning success - DSEQ: %d\n", dseq)
-	
-	// Track this deployment ID as sent to network
+	fmt.Printf("Create deployment transaction succeeded - DSEQ: %d, txhash: %s\n", dseq, resp.TxHash)
+
 	dseqStr := fmt.Sprintf("%d", dseq)
-	ak.mu.Lock()
-	ak.sentDeploymentIDs[dseqStr] = true
-	ak.mu.Unlock()
-	fmt.Printf("[DEBUG] Tracked deployment ID: %s\n", dseqStr)
-	
 	return clienttypes.Seqs{
 		Dseq: dseqStr,
-		Gseq: "1", // Default group sequence
-		Oseq: "1", // Default order sequence
+		Gseq: "1",
+		Oseq: "1",
 	}, nil
 }
 
@@ -656,7 +605,7 @@ func (ak *AkashClient) CloseDeployment(ctx context.Context, dseq string, owner s
 	}
 
 	msg := &deploymenttypes.MsgCloseDeployment{
-		ID: deploymenttypes.DeploymentID{
+		ID: dv1.DeploymentID{
 			DSeq:  dseqUint,
 			Owner: owner,
 		},
@@ -715,11 +664,11 @@ func (ak *AkashClient) UpdateDeployment(ctx context.Context, dseq string, sdl st
 
 	// Generate proper hash from SDL content
 	msg := &deploymenttypes.MsgUpdateDeployment{
-		ID: deploymenttypes.DeploymentID{
+		ID: dv1.DeploymentID{
 			DSeq:  dseqUint,
 			Owner: ak.Config.AccountAddress,
 		},
-		Version: generateSDLHash(sdl),
+		Hash: generateSDLHash(sdl),
 	}
 
 	txClient := client.Tx()

@@ -10,7 +10,8 @@ import (
 	"crypto/tls"
 	"net/http"
 
-	deploymentcli "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	sdkmath "cosmossdk.io/math"
+	deploymentcli "pkg.akt.dev/go/node/deployment/v1beta4"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/codec"
@@ -18,6 +19,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	"github.com/cosmos/cosmos-sdk/std"
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
+	signingtypes "github.com/cosmos/cosmos-sdk/types/tx/signing"
 	"github.com/cosmos/cosmos-sdk/x/auth"
 	"github.com/cosmos/cosmos-sdk/x/auth/tx"
 	clienttx "github.com/cosmos/cosmos-sdk/client/tx"
@@ -26,7 +28,7 @@ import (
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/pkg/errors"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
+	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 
 	// Note: Using a simple client wrapper instead of akash-api client due to version incompatibilities
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -76,10 +78,6 @@ type AkashClient struct {
 	secretRef       *SecretReference
 	managedResource resource.Managed // Managed resource with ProviderConfigReference
 	usage           resource.Tracker // For tracking ProviderConfig usage
-
-	// Development tracking for sent deployment IDs to prevent false updates
-	sentDeploymentIDs map[string]bool
-	mu               sync.RWMutex
 }
 
 type SecretReference struct {
@@ -128,7 +126,6 @@ func New(ctx context.Context, configuration AkashProviderConfiguration) *AkashCl
 	return &AkashClient{
 		ctx:               ctx, 
 		Config:            configuration,
-		sentDeploymentIDs: make(map[string]bool),
 	}
 }
 
@@ -139,7 +136,6 @@ func NewWithSecretRef(ctx context.Context, kubeClient client.Client, secretRef S
 		Config:            config,
 		kubeClient:        kubeClient,
 		secretRef:         &secretRef,
-		sentDeploymentIDs: make(map[string]bool),
 		credentialCache: &credentialCache{
 			ttl: 5 * time.Minute, // Default TTL for credential cache
 		},
@@ -205,11 +201,11 @@ type TxClient struct {
 func (t *TxClient) BroadcastMsgs(ctx context.Context, msgs ...sdktypes.Msg) (*sdktypes.TxResponse, error) {
 	// Build transaction with proper gas and fees
 	gasLimit := uint64(200000)
-	gasPrice := sdktypes.NewDecWithPrec(25, 4) // 0.0025 AKT per gas unit
+	gasPrice := sdkmath.LegacyNewDecWithPrec(25, 4) // 0.0025 AKT per gas unit
 	feeAmount := gasPrice.MulInt64(int64(gasLimit)).TruncateInt()
 
 	// Ensure minimum fee of 500uakt
-	minFee := sdktypes.NewInt(500)
+	minFee := sdkmath.NewInt(500)
 	if feeAmount.LT(minFee) {
 		feeAmount = minFee
 	}
@@ -237,14 +233,14 @@ func (t *TxClient) BroadcastMsgs(ctx context.Context, msgs ...sdktypes.Msg) (*sd
 		WithKeybase(t.clientCtx.Keyring).
 		WithGas(gasLimit).
 		WithFees(fees.String()).
-		WithSignMode(t.clientCtx.TxConfig.SignModeHandler().DefaultMode())
+		WithSignMode(signingtypes.SignMode_SIGN_MODE_DIRECT)
 
 	// Build, sign and broadcast the transaction
-	return t.broadcastTxWithFactory(txf, msgs...)
+	return t.broadcastTxWithFactory(ctx, txf, msgs...)
 }
 
 // broadcastTxWithFactory handles the actual transaction building, signing and broadcasting
-func (t *TxClient) broadcastTxWithFactory(txf clienttx.Factory, msgs ...sdktypes.Msg) (*sdktypes.TxResponse, error) {
+func (t *TxClient) broadcastTxWithFactory(ctx context.Context, txf clienttx.Factory, msgs ...sdktypes.Msg) (*sdktypes.TxResponse, error) {
 	// Prepare the factory by fetching account info from the network
 	txf, err := t.prepareFactory(txf)
 	if err != nil {
@@ -258,7 +254,7 @@ func (t *TxClient) broadcastTxWithFactory(txf clienttx.Factory, msgs ...sdktypes
 	}
 
 	// Sign the transaction
-	err = clienttx.Sign(txf, t.clientCtx.GetFromName(), txBuilder, true)
+	err = clienttx.Sign(ctx, txf, t.clientCtx.GetFromName(), txBuilder, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign transaction: %w", err)
 	}
@@ -388,7 +384,6 @@ func NewFromManagedResource(ctx context.Context, kubeClient client.Client, usage
 		kubeClient:        kubeClient,
 		managedResource:   mg,
 		usage:             usage,
-		sentDeploymentIDs: make(map[string]bool),
 		credentialCache: &credentialCache{
 			ttl: 5 * time.Minute, // Default TTL for credential cache
 		},
@@ -602,7 +597,7 @@ func (ak *AkashClient) getNodeClient() (*NodeClient, error) {
 		return nil, fmt.Errorf("failed to create RPC client: %w", err)
 	}
 
-	kr := keyring.NewInMemory()
+	kr := keyring.NewInMemory(cdc)
 
 	passphrase := ""
 	if len(ak.Config.Passphrase) > 0 {

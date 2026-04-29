@@ -57,6 +57,7 @@ const (
 	errNoExternalName    = "no external-name annotation found"
 	errNoOwnerAddress    = "owner address not configured in provider"
 	errObserveDeployment = "failed to observe deployment"
+	errQueryDeployment   = "failed to query deployment"
 	errCreateDeployment  = "failed to create deployment"
 	errUpdateDeployment  = "failed to update deployment"
 	errDeleteDeployment  = "failed to delete deployment"
@@ -204,30 +205,8 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	fmt.Printf("Querying deployment with DSEQ: %s, Owner: %s\n", dseq, owner)
 	deployment, err := c.service.client.GetDeployment(ctx, dseq, owner)
 	if err != nil {
-		fmt.Printf("Error querying deployment: %v\n", err)
-		fmt.Printf("[INFO] Returning fake deployment data to prevent recreation loops\n")
-		
-		// Return fake deployment data to prevent Crossplane from trying to recreate
-		// This prevents getting banned from the network due to repeated failed requests
-		cr.Status.AtProvider.DeploymentId = dseq
-		cr.Status.AtProvider.State = "active"  // Fake active state
-		cr.Status.AtProvider.Owner = owner
-		cr.Status.AtProvider.Version = "fake-v1"
-		
-		// Set fake escrow balance
-		cr.Status.AtProvider.EscrowBalance = &v1alpha1.BalanceStatus{
-			Denom:  "uakt",
-			Amount: "5000000", // 5 AKT
-		}
-		
-		// Set Ready condition as true
-		setReadyCondition(cr, "active")
-		setStatusCondition(cr, xpv1.TypeSynced, corev1.ConditionTrue, xpv1.ReasonReconcileSuccess, "Fake deployment data returned")
-		
-		return managed.ExternalObservation{
-			ResourceExists:   true,  // Fake that it exists
-			ResourceUpToDate: true,  // Fake that it's up to date
-		}, nil
+		fmt.Printf("Error querying deployment %s: %v\n", dseq, err)
+		return managed.ExternalObservation{}, errors.Wrap(err, errQueryDeployment)
 	}
 
 	fmt.Printf("Found deployment: State=%s, DSEQ=%s\n", deployment.DeploymentInfo.State, deployment.DeploymentInfo.DeploymentId.Dseq)
