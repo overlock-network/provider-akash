@@ -133,7 +133,8 @@ func (ak *AkashClient) CreateDeployment(ctx context.Context, req clienttypes.Dep
 		Groups: groups,
 		Hash:   generateSDLHash(req.SDL),
 		Deposit: depositv1.Deposit{
-			Amount: depositCoin,
+			Amount:  depositCoin,
+			Sources: depositv1.Sources{depositv1.SourceBalance},
 		},
 	}
 
