@@ -33,7 +33,6 @@ type DeploymentResponse struct {
 }
 
 type DeploymentCreateRequest struct {
-	SDL      string `json:"sdl"`
-	Deposit  int64  `json:"deposit"`
-	Currency string `json:"currency"`
+	SDL     string `json:"sdl"`
+	Deposit int64  `json:"deposit"`
 }

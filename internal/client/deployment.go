@@ -20,6 +20,9 @@ import (
 	"pkg.akt.dev/go/node/types/unit"
 )
 
+// DepositDenom is the deposit denomination required by node v2 BME for new deployments.
+const DepositDenom = "uact"
+
 func (ak *AkashClient) GetDeployments(owner string) ([]clienttypes.DeploymentId, error) {
 	client, err := ak.getNodeClient()
 	if err != nil {
@@ -104,23 +107,22 @@ func (ak *AkashClient) GetDeployment(ctx context.Context, dseq string, owner str
 	}, nil
 }
 
-// CreateDeployment creates a new deployment with SDL content, deposit amount, and currency
+// CreateDeployment creates a new deployment with SDL content and deposit amount.
+// The deposit denom is fixed to uact (DepositDenom) per node v2 BME.
 func (ak *AkashClient) CreateDeployment(ctx context.Context, req clienttypes.DeploymentCreateRequest) (clienttypes.Seqs, error) {
-	fmt.Printf("Creating deployment with SDL content (length: %d), deposit: %d %s\n", len(req.SDL), req.Deposit, req.Currency)
+	fmt.Printf("Creating deployment with SDL content (length: %d), deposit: %d %s\n", len(req.SDL), req.Deposit, DepositDenom)
 
 	client, err := ak.getNodeClient()
 	if err != nil {
 		return clienttypes.Seqs{}, fmt.Errorf("failed to get node client: %w", err)
 	}
 
-	// Parse SDL content and generate GroupSpec from it
 	groups, err := parseSDLToGroupSpecs(req.SDL)
 	if err != nil {
 		return clienttypes.Seqs{}, fmt.Errorf("failed to parse SDL content: %w", err)
 	}
 
-	// Create deposit coin with specified currency and amount
-	depositCoin := sdktypes.NewInt64Coin(req.Currency, req.Deposit)
+	depositCoin := sdktypes.NewInt64Coin(DepositDenom, req.Deposit)
 
 	// Generate a unique DSEQ based on current timestamp
 	dseq := uint64(time.Now().Unix())
@@ -298,7 +300,7 @@ func convertSDLToGroupSpecs(sdl *clienttypes.SDL) ([]deploymenttypes.GroupSpec, 
 			return nil, fmt.Errorf("pricing not found for service '%s' in placement profile", groupName)
 		}
 
-		priceCoin := sdktypes.NewInt64DecCoin(pricing.Denom, pricing.Amount)
+		priceCoin := sdktypes.NewInt64DecCoin(DepositDenom, pricing.Amount)
 
 		// Create GroupSpec
 		groupSpec := deploymenttypes.GroupSpec{

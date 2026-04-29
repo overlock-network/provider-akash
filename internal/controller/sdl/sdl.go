@@ -352,10 +352,9 @@ func convertProfiles(crdProfiles v1alpha1.SDLProfiles) clienttypes.SDLProfiles {
 			}
 		}
 
-		// Convert pricing
+		// Convert pricing (denom is fixed to uact under node v2 BME, no per-service config)
 		for serviceName, pricing := range placement.Pricing {
 			placementProfile.Pricing[serviceName] = clienttypes.SDLPricing{
-				Denom:  pricing.Denom,
 				Amount: pricing.Amount,
 			}
 		}

@@ -157,12 +157,6 @@ func (ak *AkashClient) validatePlacementProfile(name string, placement types.SDL
 	}
 
 	for serviceName, pricing := range placement.Pricing {
-		if pricing.Denom == "" {
-			errors = append(errors, fmt.Sprintf("placement profile '%s' service '%s': denom is required", name, serviceName))
-		} else if !isValidDenom(pricing.Denom) {
-			errors = append(errors, fmt.Sprintf("placement profile '%s' service '%s': invalid denom '%s'", name, serviceName, pricing.Denom))
-		}
-
 		if pricing.Amount <= 0 {
 			errors = append(errors, fmt.Sprintf("placement profile '%s' service '%s': amount must be positive", name, serviceName))
 		}
@@ -228,13 +222,3 @@ func isValidStorageSize(size string) bool {
 	return matched
 }
 
-func isValidDenom(denom string) bool {
-	// Valid denominations for Akash
-	validDenoms := []string{"uakt", "akt", "ibc/170C677610AC31DF0904FFE09CD3B5C657492170E7E52372E48756B71E56F2F1"}
-	for _, valid := range validDenoms {
-		if denom == valid {
-			return true
-		}
-	}
-	return false
-}

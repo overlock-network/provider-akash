@@ -40,7 +40,7 @@ func TestSDLValidation(t *testing.T) {
 					Placement: map[string]types.SDLPlacementProfile{
 						"westcoast": {
 							Pricing: map[string]types.SDLPricing{
-								"web": {Denom: "uakt", Amount: 100},
+								"web": {Amount: 100},
 							},
 						},
 					},
@@ -71,7 +71,7 @@ func TestSDLValidation(t *testing.T) {
 					Placement: map[string]types.SDLPlacementProfile{
 						"westcoast": {
 							Pricing: map[string]types.SDLPricing{
-								"web": {Denom: "uakt", Amount: 100},
+								"web": {Amount: 100},
 							},
 						},
 					},
@@ -116,7 +116,7 @@ func TestSDLValidation(t *testing.T) {
 					Placement: map[string]types.SDLPlacementProfile{
 						"westcoast": {
 							Pricing: map[string]types.SDLPricing{
-								"web": {Denom: "uakt", Amount: 100},
+								"web": {Amount: 100},
 							},
 						},
 					},
@@ -153,7 +153,7 @@ func TestSDLValidation(t *testing.T) {
 					Placement: map[string]types.SDLPlacementProfile{
 						"westcoast": {
 							Pricing: map[string]types.SDLPricing{
-								"web": {Denom: "uakt", Amount: 100},
+								"web": {Amount: 100},
 							},
 						},
 					},
@@ -219,11 +219,6 @@ func TestValidationHelpers(t *testing.T) {
 		{"valid storage size", isValidStorageSize, "1Gi", true},
 		{"valid storage size with Ti", isValidStorageSize, "1Ti", true},
 		{"invalid storage size", isValidStorageSize, "1GB", false},
-		
-		{"valid denom uakt", isValidDenom, "uakt", true},
-		{"valid denom akt", isValidDenom, "akt", true},
-		{"valid denom IBC", isValidDenom, "ibc/170C677610AC31DF0904FFE09CD3B5C657492170E7E52372E48756B71E56F2F1", true},
-		{"invalid denom", isValidDenom, "invalid", false},
 	}
 
 	for _, tc := range testCases {

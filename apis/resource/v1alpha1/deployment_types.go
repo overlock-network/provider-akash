@@ -27,10 +27,9 @@ import (
 
 const (
 	// Deployment constants
-	MinimumDepositAmount = 500000  // Minimum deposit: 0.5 AKT in uakt
-	DefaultDepositAmount = 5000000 // Default deposit: 5 AKT in uakt  
-	DefaultCurrency      = "uakt"  // Default Akash token denomination
-	AlternateCurrency    = "akt"   // Alternate Akash token denomination
+	MinimumDepositAmount = 500000  // Minimum deposit (uact)
+	DefaultDepositAmount = 5000000 // Default deposit (uact)
+	DepositDenom         = "uact"  // Node v2 BME deposit denom
 )
 
 // DeploymentParameters are the configurable fields of a Deployment.
@@ -39,16 +38,12 @@ type DeploymentParameters struct {
 	// +kubebuilder:validation:Required
 	SDLRef SDLReference `json:"sdlRef"`
 
-	// Deposit is the deployment deposit amount in uakt (minimum 500000, default 5000000)
+	// Deposit is the deployment deposit amount in uact (minimum 500000, default 5000000).
+	// Node v2 BME hard-codes the deposit denom to uact, so it is not user-configurable.
 	// +kubebuilder:validation:Minimum=500000
 	// +kubebuilder:validation:Maximum=1000000000000
 	// +kubebuilder:default=5000000
 	Deposit *int64 `json:"deposit,omitempty"`
-
-	// Currency is the token denomination (default "uakt")
-	// +kubebuilder:validation:Enum=uakt;akt
-	// +kubebuilder:default="uakt"
-	Currency *string `json:"currency,omitempty"`
 }
 
 // SDLReference references an SDL resource

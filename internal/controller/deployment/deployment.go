@@ -270,12 +270,10 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		}
 	}
 
-	// Compare desired currency with actual escrow denomination
-	if cr.Spec.ForProvider.Currency != nil {
-		desiredCurrency := *cr.Spec.ForProvider.Currency
-		if deployment.EscrowAccount.Balance.Denom != desiredCurrency {
-			isUpToDate = false
-		}
+	// Deposit denom is fixed to uact under node v2 BME — escrow should always
+	// settle in that denom once the deployment is on-chain.
+	if deployment.EscrowAccount.Balance.Denom != "" && deployment.EscrowAccount.Balance.Denom != v1alpha1.DepositDenom {
+		isUpToDate = false
 	}
 
 	// Compare actual deployment SDL hash with desired spec SDL  
@@ -331,24 +329,16 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalCreation{}, errors.Wrap(err, "failed to resolve SDL content")
 	}
 
-	// Get deposit and currency from spec with defaults
 	deposit := int64(v1alpha1.DefaultDepositAmount)
 	if cr.Spec.ForProvider.Deposit != nil {
 		deposit = *cr.Spec.ForProvider.Deposit
 	}
 
-	currency := v1alpha1.DefaultCurrency
-	if cr.Spec.ForProvider.Currency != nil {
-		currency = *cr.Spec.ForProvider.Currency
-	}
+	fmt.Printf("Creating deployment with SDL length: %d, deposit: %d %s\n", len(sdlContent), deposit, v1alpha1.DepositDenom)
 
-	fmt.Printf("Creating deployment with SDL length: %d, deposit: %d %s\n", len(sdlContent), deposit, currency)
-
-	// Create the deployment using the client
 	req := clienttypes.DeploymentCreateRequest{
-		SDL:      sdlContent,
-		Deposit:  deposit,
-		Currency: currency,
+		SDL:     sdlContent,
+		Deposit: deposit,
 	}
 	seqs, err := c.service.client.CreateDeployment(ctx, req)
 	if err != nil {
@@ -378,7 +368,7 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 			"oseq":         []byte(seqs.Oseq),
 			"owner":        []byte(c.service.client.Config.AccountAddress),
 			"deposit":      []byte(fmt.Sprintf("%d", deposit)),
-			"currency":     []byte(currency),
+			"currency":     []byte(v1alpha1.DepositDenom),
 		},
 	}, nil
 }

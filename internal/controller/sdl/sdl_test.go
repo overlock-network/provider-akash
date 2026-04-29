@@ -50,7 +50,7 @@ func TestGenerateSDLHash(t *testing.T) {
 					Placement: map[string]v1alpha1.SDLPlacementProfile{
 						"westcoast": {
 							Pricing: map[string]v1alpha1.SDLPricing{
-								"web": {Denom: "uakt", Amount: 100},
+								"web": {Amount: 100},
 							},
 						},
 					},
@@ -76,7 +76,7 @@ func TestGenerateSDLHash(t *testing.T) {
 					Placement: map[string]v1alpha1.SDLPlacementProfile{
 						"westcoast": {
 							Pricing: map[string]v1alpha1.SDLPricing{
-								"web": {Denom: "uakt", Amount: 100},
+								"web": {Amount: 100},
 							},
 						},
 					},
@@ -106,7 +106,7 @@ func TestGenerateSDLHash(t *testing.T) {
 					Placement: map[string]v1alpha1.SDLPlacementProfile{
 						"westcoast": {
 							Pricing: map[string]v1alpha1.SDLPricing{
-								"web": {Denom: "uakt", Amount: 100},
+								"web": {Amount: 100},
 							},
 						},
 					},
@@ -132,7 +132,7 @@ func TestGenerateSDLHash(t *testing.T) {
 					Placement: map[string]v1alpha1.SDLPlacementProfile{
 						"westcoast": {
 							Pricing: map[string]v1alpha1.SDLPricing{
-								"web": {Denom: "uakt", Amount: 100},
+								"web": {Amount: 100},
 							},
 						},
 					},
@@ -202,7 +202,7 @@ func TestConvertToInternalSDL(t *testing.T) {
 					Placement: map[string]v1alpha1.SDLPlacementProfile{
 						"westcoast": {
 							Pricing: map[string]v1alpha1.SDLPricing{
-								"web": {Denom: "uakt", Amount: 100},
+								"web": {Amount: 100},
 							},
 						},
 					},
@@ -239,7 +239,7 @@ func TestConvertToInternalSDL(t *testing.T) {
 					Placement: map[string]clienttypes.SDLPlacementProfile{
 						"westcoast": {
 							Pricing: map[string]clienttypes.SDLPricing{
-								"web": {Denom: "uakt", Amount: 100},
+								"web": {Amount: 100},
 							},
 						},
 					},
