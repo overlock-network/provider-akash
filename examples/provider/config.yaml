@@ -8,7 +8,7 @@ data:
 
 ---
 
-apiVersion: akash.web7.md/v1alpha1
+apiVersion: akash.overlock.network/v1alpha1
 kind: ProviderConfig
 metadata:
   name: example

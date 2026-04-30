@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.0
-  name: storeconfigs.akash.web7.md
+  name: storeconfigs.akash.overlock.network
 spec:
-  group: akash.web7.md
+  group: akash.overlock.network
   names:
     categories:
     - crossplane

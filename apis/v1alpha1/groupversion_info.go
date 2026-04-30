@@ -16,7 +16,7 @@ limitations under the License.
 
 // Package v1alpha1 contains the core resources of the Akash provider.
 // +kubebuilder:object:generate=true
-// +groupName=akash.web7.md
+// +groupName=akash.overlock.network
 // +versionName=v1alpha1
 package v1alpha1
 
@@ -27,7 +27,7 @@ import (
 
 // Package type metadata.
 const (
-	Group   = "akash.web7.md"
+	Group   = "akash.overlock.network"
 	Version = "v1alpha1"
 )
 
