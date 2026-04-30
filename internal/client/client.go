@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	sdkmath "cosmossdk.io/math"
+	certcli "pkg.akt.dev/go/node/cert/v1"
 	deploymentcli "pkg.akt.dev/go/node/deployment/v1beta4"
 	marketcli "pkg.akt.dev/go/node/market/v1beta5"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
@@ -181,6 +182,11 @@ func (q *QueryClient) Deployment() deploymentcli.QueryClient {
 // Market returns the market query client (orders, bids, leases)
 func (q *QueryClient) Market() marketcli.QueryClient {
 	return marketcli.NewQueryClient(q.clientCtx)
+}
+
+// Cert returns the certificate query client
+func (q *QueryClient) Cert() certcli.QueryClient {
+	return certcli.NewQueryClient(q.clientCtx)
 }
 
 // Auth returns the auth query client
