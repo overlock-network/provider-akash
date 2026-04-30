@@ -37,7 +37,7 @@ spec:
     - jsonPath: .status.atProvider.ordersOpen
       name: ORDERS
       type: integer
-    - jsonPath: .status.atProvider.bidsOpen
+    - jsonPath: .status.atProvider.bids
       name: BIDS
       type: integer
     - jsonPath: .status.atProvider.leasesActive
@@ -292,10 +292,19 @@ spec:
                 description: DeploymentObservation are the observable fields of a
                   Deployment.
                 properties:
+                  bids:
+                    description: |-
+                      Bids is the total count of bids the chain has ever recorded for this
+                      deployment, regardless of state. Stays >0 after the bid window
+                      expires so users can see "providers did bid, just couldn't win"
+                      — see #29.
+                    format: int32
+                    type: integer
                   bidsOpen:
                     description: |-
-                      BidsOpen is the count of currently-open bids on chain for this
-                      deployment. Useful for diagnosing #29-style "no bids" reports.
+                      BidsOpen is the count of bids in the Open state (i.e., still
+                      awaiting acceptance). Drops to 0 once the bid window passes even
+                      though Bids stays at its high-water mark.
                     format: int32
                     type: integer
                   createdHeight:

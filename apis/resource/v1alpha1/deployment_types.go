@@ -90,8 +90,15 @@ type DeploymentObservation struct {
 	// deployment, contributing to the Phase derivation.
 	LeasesActive int32 `json:"leasesActive,omitempty"`
 
-	// BidsOpen is the count of currently-open bids on chain for this
-	// deployment. Useful for diagnosing #29-style "no bids" reports.
+	// Bids is the total count of bids the chain has ever recorded for this
+	// deployment, regardless of state. Stays >0 after the bid window
+	// expires so users can see "providers did bid, just couldn't win"
+	// — see #29.
+	Bids int32 `json:"bids,omitempty"`
+
+	// BidsOpen is the count of bids in the Open state (i.e., still
+	// awaiting acceptance). Drops to 0 once the bid window passes even
+	// though Bids stays at its high-water mark.
 	BidsOpen int32 `json:"bidsOpen,omitempty"`
 
 	// CreatedHeight is the block height when deployment was created
@@ -133,7 +140,7 @@ type DeploymentStatus struct {
 // +kubebuilder:printcolumn:name="STATE",type="string",JSONPath=".status.atProvider.state"
 // +kubebuilder:printcolumn:name="PHASE",type="string",JSONPath=".status.atProvider.phase"
 // +kubebuilder:printcolumn:name="ORDERS",type="integer",JSONPath=".status.atProvider.ordersOpen"
-// +kubebuilder:printcolumn:name="BIDS",type="integer",JSONPath=".status.atProvider.bidsOpen"
+// +kubebuilder:printcolumn:name="BIDS",type="integer",JSONPath=".status.atProvider.bids"
 // +kubebuilder:printcolumn:name="LEASES",type="integer",JSONPath=".status.atProvider.leasesActive"
 // +kubebuilder:printcolumn:name="OWNER",type="string",JSONPath=".status.atProvider.owner"
 // +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp"

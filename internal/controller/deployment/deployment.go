@@ -591,28 +591,43 @@ func (c *external) derivePhase(ctx context.Context, chainState, dseq, owner stri
 			ordersOpen++
 		}
 	}
-	bidsOpen := 0
+	bidsOpen, bidsTerminal := 0, 0
 	for _, b := range bids {
-		if b.State == "open" {
+		switch b.State {
+		case "open":
 			bidsOpen++
+		case "lost", "closed":
+			bidsTerminal++
 		}
 	}
 
 	cr.Status.AtProvider.OrdersOpen = int32(ordersOpen)
+	cr.Status.AtProvider.Bids = int32(len(bids))
 	cr.Status.AtProvider.BidsOpen = int32(bidsOpen)
 	cr.Status.AtProvider.LeasesActive = int32(leasesActive)
 
+	// Order semantics on Akash node v2: orders stay in Open state
+	// indefinitely; the "bid window expired" event is observable via the
+	// bids themselves transitioning Open -> Lost/Closed. So we only treat
+	// an open order as "live Bidding" when there is at least one bid still
+	// open. Once all submitted bids have terminated without producing a
+	// lease (the typical sandbox-2 case after ~5 min), the deployment is
+	// effectively "Expired" from the user's perspective.
 	switch {
 	case leasesActive > 0:
 		return phaseLeased
+	case bidsOpen > 0:
+		return phaseBidding
+	case bidsTerminal > 0:
+		return phaseExpired
 	case ordersOpen > 0:
+		// Order just opened; bids appear within a block or two. Stay
+		// in Bidding until either an open bid or a terminal bid is
+		// observed.
 		return phaseBidding
 	case len(orders) > 0:
-		// Orders exist but all closed and no leases — the bid window
-		// passed without producing a lease. Console calls this "expired".
 		return phaseExpired
 	default:
-		// No orders observed yet (block freshly committed, or query lag).
 		return phaseBidding
 	}
 }
