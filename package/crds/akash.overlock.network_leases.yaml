@@ -28,7 +28,7 @@ spec:
     - jsonPath: .status.atProvider.leaseId
       name: LEASE-ID
       type: string
-    - jsonPath: .status.atProvider.status.state
+    - jsonPath: .status.atProvider.state
       name: STATE
       type: string
     - jsonPath: .status.atProvider.provider

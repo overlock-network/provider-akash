@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -313,8 +314,26 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 
 	fmt.Printf("Observing Lease: %s\n", cr.Name)
 
+	// During CR deletion, skip resolveReferences (parent Deployment may
+	// have been GC'd alongside us) and decide ResourceExists from the
+	// chain state we already observed. ResourceExists=true while the
+	// chain lease is still Active makes Crossplane call Delete (which
+	// broadcasts MsgCloseLease); once the chain transitions to Closed
+	// we report ResourceExists=false so the finalizer clears.
+	if cr.GetDeletionTimestamp() != nil {
+		if cr.Status.AtProvider.State == stateActive {
+			return managed.ExternalObservation{ResourceExists: true, ResourceUpToDate: true}, nil
+		}
+		return managed.ExternalObservation{ResourceExists: false}, nil
+	}
+
 	err := c.resolveReferences(ctx, cr)
 	if err != nil {
+		if apierrors.IsNotFound(errors.Cause(err)) {
+			// Parent Deployment is gone — surface as "external resource
+			// gone" so the reconciler clears finalizers cleanly.
+			return managed.ExternalObservation{ResourceExists: false}, nil
+		}
 		c.setFailedState(cr, fmt.Sprintf("Failed to resolve references: %v", err))
 		return managed.ExternalObservation{}, err
 	}

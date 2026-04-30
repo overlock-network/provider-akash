@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -406,20 +407,27 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) (managed.Ext
 	return managed.ExternalDelete{}, nil
 }
 
-// bidMeetsPolicy checks if an ActiveBid meets the policy criteria
+// bidMeetsPolicy checks if an ActiveBid meets the policy criteria.
+// Bid prices are stored as decimal-formatted strings (e.g. "2.372595") because
+// chain DecCoin amounts carry sub-uact precision; integer parsing silently
+// skipped every bid before #21 was reworked.
 func (s *BidPolicyService) bidMeetsPolicy(policy *akashv1alpha1.BidPolicy, bid *akashv1alpha1.ActiveBid) bool {
 	spec := policy.Spec.ForProvider
 
-	// Check max price constraint
+	// Reject bids that aren't currently open. A "lost" or "closed" bid is
+	// no longer actionable on chain.
+	if bid.Status.AtProvider.State != "" && bid.Status.AtProvider.State != "open" {
+		return false
+	}
+
 	if spec.MaxPrice != nil && bid.Status.AtProvider.Price != nil {
-		if price, err := strconv.ParseInt(bid.Status.AtProvider.Price.Amount, 10, 64); err == nil {
-			if price > *spec.MaxPrice {
+		if price, err := strconv.ParseFloat(bid.Status.AtProvider.Price.Amount, 64); err == nil {
+			if price > float64(*spec.MaxPrice) {
 				return false
 			}
 		}
 	}
 
-	// Check excluded providers
 	for _, excluded := range spec.ExcludedProviders {
 		if bid.Status.AtProvider.Provider == excluded {
 			return false
@@ -429,23 +437,22 @@ func (s *BidPolicyService) bidMeetsPolicy(policy *akashv1alpha1.BidPolicy, bid *
 	return true
 }
 
-// selectLowestPrice selects the bid with the lowest price
+// selectLowestPrice selects the bid with the lowest price. Prices are decimal
+// strings ("2.372595") so we parse as float; selection compares numerically.
 func (s *BidPolicyService) selectLowestPrice(bids []akashv1alpha1.ActiveBid) (*akashv1alpha1.ActiveBid, string, error) {
 	var selectedBid *akashv1alpha1.ActiveBid
-	var lowestPrice int64 = -1
+	lowestPrice := -1.0
 
 	for i := range bids {
 		bid := &bids[i]
 		if bid.Status.AtProvider.Price == nil {
 			continue
 		}
-
-		price, err := strconv.ParseInt(bid.Status.AtProvider.Price.Amount, 10, 64)
+		price, err := strconv.ParseFloat(bid.Status.AtProvider.Price.Amount, 64)
 		if err != nil {
 			continue
 		}
-
-		if lowestPrice == -1 || price < lowestPrice {
+		if lowestPrice < 0 || price < lowestPrice {
 			lowestPrice = price
 			selectedBid = bid
 		}
@@ -455,7 +462,12 @@ func (s *BidPolicyService) selectLowestPrice(bids []akashv1alpha1.ActiveBid) (*a
 		return nil, "", errors.New("no valid bids with pricing information")
 	}
 
-	reason := fmt.Sprintf("Selected lowest price bid: %d uAKT from provider %s", lowestPrice, selectedBid.Status.AtProvider.Provider)
+	denom := "uact"
+	if selectedBid.Status.AtProvider.Price != nil && selectedBid.Status.AtProvider.Price.Denom != "" {
+		denom = selectedBid.Status.AtProvider.Price.Denom
+	}
+	reason := fmt.Sprintf("Selected lowest price bid: %s %s from provider %s",
+		selectedBid.Status.AtProvider.Price.Amount, denom, selectedBid.Status.AtProvider.Provider)
 	return selectedBid, reason, nil
 }
 
@@ -706,19 +718,89 @@ func (c *external) processBidSelections(ctx context.Context, cr *akashv1alpha1.B
 	return false, 0, nil
 }
 
-// createLeaseForBid creates a lease for the selected bid
+// createLeaseForBid creates a Lease CR pointing at the selected ActiveBid.
+// The Lease controller's Create then broadcasts MsgCreateLease on chain.
+//
+// Lease is a regular Crossplane managed resource, so we just write the CR;
+// the rest of the lifecycle (broadcast, observe, delete) lives in the lease
+// module. Idempotent: if a Lease for this deployment already exists we
+// return nil without re-creating it.
 func (c *external) createLeaseForBid(ctx context.Context, cr *akashv1alpha1.BidPolicy, deploymentName string, selectedBid *akashv1alpha1.ActiveBid) error {
-	fmt.Printf("Would create lease for deployment %s with bid %s from provider %s\n",
-		deploymentName, selectedBid.Spec.ForProvider.BidId, selectedBid.Status.AtProvider.Provider)
+	leaseName := fmt.Sprintf("%s-lease", deploymentName)
+	depNs := ""
+	if selectedBid.Spec.ForProvider.DeploymentRef.Namespace != nil {
+		depNs = *selectedBid.Spec.ForProvider.DeploymentRef.Namespace
+	}
 
-	// Update status to indicate lease creation
-	leaseRef := akashv1alpha1.LeaseReference{
-		Name:      fmt.Sprintf("%s-lease", deploymentName),
-		Namespace: selectedBid.Namespace,
-		LeaseId:   fmt.Sprintf("%s-lease-id", selectedBid.Spec.ForProvider.BidId),
+	existing := &akashv1alpha1.Lease{}
+	err := c.service.kubeClient.Get(ctx, kubeclient.ObjectKey{Name: leaseName}, existing)
+	if err == nil {
+		// Already created on a previous reconcile — record it in status
+		// for observability and stop.
+		cr.Status.AtProvider.CreatedLeases[deploymentName] = akashv1alpha1.LeaseReference{
+			Name:      existing.Name,
+			Namespace: existing.Namespace,
+			LeaseId:   existing.Status.AtProvider.LeaseId,
+		}
+		return nil
+	}
+	if !apierrors.IsNotFound(err) {
+		return err
+	}
+
+	// Anchor the Lease to the parent Deployment so K8s GC cascades when
+	// the user deletes the Deployment. We can't depend on the Deployment
+	// CR's UID directly without fetching it, so do that here.
+	dep := &v1alpha1.Deployment{}
+	if err := c.service.kubeClient.Get(ctx, kubeclient.ObjectKey{Name: deploymentName, Namespace: depNs}, dep); err != nil {
+		return fmt.Errorf("failed to fetch parent Deployment for ownerRef: %w", err)
+	}
+	truthy := true
+
+	lease := &akashv1alpha1.Lease{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: leaseName,
+			Labels: map[string]string{
+				"akash.overlock.network/deployment": deploymentName,
+				"akash.overlock.network/policy":     cr.Name,
+			},
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion:         v1alpha1.SchemeGroupVersion.String(),
+				Kind:               v1alpha1.DeploymentKind,
+				Name:               dep.Name,
+				UID:                dep.UID,
+				Controller:         &truthy,
+				BlockOwnerDeletion: &truthy,
+			}},
+		},
+		Spec: akashv1alpha1.LeaseSpec{
+			ResourceSpec: xpv1.ResourceSpec{
+				ProviderConfigReference: cr.Spec.ProviderConfigReference,
+			},
+			ForProvider: akashv1alpha1.LeaseParameters{
+				DeploymentRef: akashv1alpha1.DeploymentReference{
+					Name:      deploymentName,
+					Namespace: &depNs,
+				},
+				ActiveBidRef: akashv1alpha1.ActiveBidReference{
+					Name:      selectedBid.Name,
+					Namespace: selectedBid.Namespace,
+					BidId:     selectedBid.Spec.ForProvider.BidId,
+					Provider:  selectedBid.Status.AtProvider.Provider,
+				},
+			},
+		},
+	}
+	if err := c.service.kubeClient.Create(ctx, lease); err != nil {
+		return fmt.Errorf("failed to create Lease %s: %w", leaseName, err)
+	}
+
+	cr.Status.AtProvider.CreatedLeases[deploymentName] = akashv1alpha1.LeaseReference{
+		Name:      leaseName,
+		Namespace: lease.Namespace,
 		CreatedAt: &metav1.Time{Time: metav1.Now().Time},
 	}
-	cr.Status.AtProvider.CreatedLeases[deploymentName] = leaseRef
-
+	fmt.Printf("Created Lease %s for deployment %s, bid from provider %s\n",
+		leaseName, deploymentName, selectedBid.Status.AtProvider.Provider)
 	return nil
 }
