@@ -23,6 +23,7 @@ import (
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -94,12 +95,18 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
 		managed.WithConnectionPublishers(cps...))
 
-	return ctrl.NewControllerManagedBy(mgr).
+	if err := ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(o.ForControllerRuntime()).
 		WithEventFilter(resource.DesiredStateChanged()).
 		For(&akashv1alpha1.ActiveBid{}).
-		Complete(ratelimiter.NewReconciler(name, r, o.GlobalRateLimiter))
+		Complete(ratelimiter.NewReconciler(name, r, o.GlobalRateLimiter)); err != nil {
+		return err
+	}
+
+	// Producer side of the same module: scan Deployments and create
+	// ActiveBid CRs for each chain bid we observe.
+	return SetupScanner(mgr, o)
 }
 
 // A connector is expected to produce an ExternalClient when its Connect method is called.
@@ -158,9 +165,25 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 
 	fmt.Printf("Observing ActiveBids for deployment reference: %s\n", cr.Spec.ForProvider.DeploymentRef.Name)
 
-	// Resolve the deployment reference to get DSEQ and owner
+	// ActiveBid is observation-only: bids on the Akash chain transition
+	// state autonomously and we never broadcast a delete tx for them.
+	// Once the user requests deletion of the CR there is therefore no
+	// "external resource" to wait on — return ResourceExists=false so
+	// Crossplane clears the managed-resource finalizer immediately.
+	if cr.GetDeletionTimestamp() != nil {
+		return managed.ExternalObservation{ResourceExists: false}, nil
+	}
+
+	// Resolve the deployment reference to get DSEQ and owner. If the parent
+	// Deployment is gone (e.g., user deleted it and we're being cascade-
+	// deleted), report ResourceExists=false so the managed reconciler can
+	// proceed to Delete instead of looping on Observe forever.
 	deployment, err := c.getReferencedDeployment(ctx, cr)
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			setStatusCondition(cr, xpv1.TypeSynced, corev1.ConditionFalse, xpv1.ReasonReconcileSuccess, "Referenced deployment is gone")
+			return managed.ExternalObservation{ResourceExists: false}, nil
+		}
 		setStatusCondition(cr, xpv1.TypeSynced, corev1.ConditionFalse, xpv1.ReasonReconcileError, fmt.Sprintf("Failed to get deployment: %v", err))
 		return managed.ExternalObservation{}, errors.Wrap(err, errGetDeployment)
 	}
@@ -209,18 +232,22 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 			}, nil
 		}
 
-		// Update status with bid information
+		// Update status with bid information (price, ids).
 		c.updateStatusWithBid(cr, bid, dseq)
 		// Set the bidId in status as well
 		cr.Status.AtProvider.BidId = bidId
-		
-		// Transition from pending to received once we successfully fetch the bid
-		if cr.Status.AtProvider.State == "" || cr.Status.AtProvider.State == "pending" {
-			cr.Status.AtProvider.State = "received"
-			// Set receivedAt timestamp
-			if cr.Status.AtProvider.ReceivedAt == 0 {
-				cr.Status.AtProvider.ReceivedAt = metav1.Now().Unix()
-			}
+
+		// Mirror the chain Bid_State directly. The chain values
+		// (open|active|lost|closed) are the source of truth and must
+		// keep refreshing — without this every ActiveBid would freeze
+		// at "received" even after the bid window expires.
+		if bid.State != "" {
+			cr.Status.AtProvider.State = bid.State
+		} else if cr.Status.AtProvider.State == "" {
+			cr.Status.AtProvider.State = "pending"
+		}
+		if cr.Status.AtProvider.ReceivedAt == 0 {
+			cr.Status.AtProvider.ReceivedAt = metav1.Now().Unix()
 		}
 
 		setStatusCondition(cr, xpv1.TypeSynced, corev1.ConditionTrue, xpv1.ReasonReconcileSuccess, "Successfully fetched bid")
