@@ -206,7 +206,10 @@ type TxClient struct {
 // BroadcastMsgs broadcasts messages using the client context
 func (t *TxClient) BroadcastMsgs(ctx context.Context, msgs ...sdktypes.Msg) (*sdktypes.TxResponse, error) {
 	// Build transaction with proper gas and fees
-	gasLimit := uint64(200000)
+	// 200000 wasn't enough for MsgCreateLease (~203k gas observed on
+	// sandbox-2). Bump to 500k as a flat headroom — auto-estimation can
+	// come later if any msg outgrows this.
+	gasLimit := uint64(500000)
 	gasPrice := sdkmath.LegacyNewDecWithPrec(25, 4) // 0.0025 AKT per gas unit
 	feeAmount := gasPrice.MulInt64(int64(gasLimit)).TruncateInt()
 

@@ -117,7 +117,7 @@ type LeaseStatus struct {
 // +kubebuilder:printcolumn:name="READY",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 // +kubebuilder:printcolumn:name="SYNCED",type="string",JSONPath=".status.conditions[?(@.type=='Synced')].status"
 // +kubebuilder:printcolumn:name="LEASE-ID",type="string",JSONPath=".status.atProvider.leaseId"
-// +kubebuilder:printcolumn:name="STATE",type="string",JSONPath=".status.atProvider.status.state"
+// +kubebuilder:printcolumn:name="STATE",type="string",JSONPath=".status.atProvider.state"
 // +kubebuilder:printcolumn:name="PROVIDER",type="string",JSONPath=".status.atProvider.provider"
 // +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:subresource:status
