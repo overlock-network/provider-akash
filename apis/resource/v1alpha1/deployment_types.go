@@ -66,8 +66,40 @@ type DeploymentObservation struct {
 	// Owner is the deployment owner address from ProviderConfig
 	Owner string `json:"owner,omitempty"`
 
-	// State is the current deployment state from Akash network
+	// State is the raw deployment state reported by Akash chain ("active",
+	// "closed").
 	State string `json:"state,omitempty"`
+
+	// Phase is a derived high-level lifecycle phase for the Deployment that
+	// folds in market state (orders, leases) so users can see why bids may
+	// not be appearing without reading multiple resources. Possible values:
+	//   - "Pending"   : not yet broadcast to chain
+	//   - "Bidding"   : on chain, an order is open and providers may bid
+	//   - "Leased"    : at least one lease is active
+	//   - "Expired"   : on chain, no leases active and no orders open
+	//                   (typical "console-expired" deployment past bid window)
+	//   - "Closed"    : chain marked the deployment closed (escrow drained
+	//                   or owner closed it)
+	Phase string `json:"phase,omitempty"`
+
+	// OrdersOpen is the count of currently-open orders on chain for this
+	// deployment, contributing to the Phase derivation.
+	OrdersOpen int32 `json:"ordersOpen,omitempty"`
+
+	// LeasesActive is the count of currently-active leases on chain for this
+	// deployment, contributing to the Phase derivation.
+	LeasesActive int32 `json:"leasesActive,omitempty"`
+
+	// Bids is the total count of bids the chain has ever recorded for this
+	// deployment, regardless of state. Stays >0 after the bid window
+	// expires so users can see "providers did bid, just couldn't win"
+	// — see #29.
+	Bids int32 `json:"bids,omitempty"`
+
+	// BidsOpen is the count of bids in the Open state (i.e., still
+	// awaiting acceptance). Drops to 0 once the bid window passes even
+	// though Bids stays at its high-water mark.
+	BidsOpen int32 `json:"bidsOpen,omitempty"`
 
 	// CreatedHeight is the block height when deployment was created
 	CreatedHeight int64 `json:"createdHeight,omitempty"`
@@ -104,9 +136,12 @@ type DeploymentStatus struct {
 // A Deployment represents an Akash Network deployment resource.
 // +kubebuilder:printcolumn:name="READY",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 // +kubebuilder:printcolumn:name="SYNCED",type="string",JSONPath=".status.conditions[?(@.type=='Synced')].status"
-// +kubebuilder:printcolumn:name="DSEQ",type="string",JSONPath=".status.atProvider.deploymentId"
 // +kubebuilder:printcolumn:name="STATE",type="string",JSONPath=".status.atProvider.state"
-// +kubebuilder:printcolumn:name="OWNER",type="string",JSONPath=".status.atProvider.owner"
+// +kubebuilder:printcolumn:name="PHASE",type="string",JSONPath=".status.atProvider.phase"
+// +kubebuilder:printcolumn:name="ORDERS",type="integer",JSONPath=".status.atProvider.ordersOpen"
+// +kubebuilder:printcolumn:name="BIDS",type="integer",JSONPath=".status.atProvider.bids"
+// +kubebuilder:printcolumn:name="LEASES",type="integer",JSONPath=".status.atProvider.leasesActive"
+// +kubebuilder:printcolumn:name="EXTERNAL-NAME",type="string",JSONPath=".metadata.annotations['crossplane\\.io/external-name']"
 // +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster,categories={crossplane,managed,akash}

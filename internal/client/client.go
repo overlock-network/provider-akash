@@ -12,6 +12,7 @@ import (
 
 	sdkmath "cosmossdk.io/math"
 	deploymentcli "pkg.akt.dev/go/node/deployment/v1beta4"
+	marketcli "pkg.akt.dev/go/node/market/v1beta5"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/codec"
@@ -175,6 +176,11 @@ type QueryClient struct {
 // Deployment returns the deployment query client
 func (q *QueryClient) Deployment() deploymentcli.QueryClient {
 	return deploymentcli.NewQueryClient(q.clientCtx)
+}
+
+// Market returns the market query client (orders, bids, leases)
+func (q *QueryClient) Market() marketcli.QueryClient {
+	return marketcli.NewQueryClient(q.clientCtx)
 }
 
 // Auth returns the auth query client
