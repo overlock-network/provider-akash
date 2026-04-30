@@ -172,6 +172,7 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 	if !ok {
 		return nil, errors.New(errNotCertificate)
 	}
+	fmt.Printf("Connect Certificate: %s\n", cr.Name)
 
 	pc := &apisv1alpha1.ProviderConfig{}
 	if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: cr.GetProviderConfigReference().Name}, pc); err != nil {
@@ -210,21 +211,31 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		return managed.ExternalObservation{}, errors.New(errNotCertificate)
 	}
 
+	// The chain-side identity is the cert serial; we stash it in the
+	// external-name annotation (same pattern Deployment uses for DSEQ)
+	// because the managed reconciler persists annotations across reconciles
+	// but not cr.Status.AtProvider mutations made inside Create.
+	serial := cr.GetAnnotations()["crossplane.io/external-name"]
+	if serial == cr.Name {
+		serial = ""
+	}
+	fmt.Printf("Observing Certificate: %s (serial=%q)\n", cr.Name, serial)
+
 	// Get owner address from ProviderConfig
 	owner, err := c.resolveOwnerAddress(ctx, cr)
 	if err != nil {
 		return managed.ExternalObservation{}, errors.Wrap(err, "failed to resolve owner address")
 	}
 
-	// If no serial is available yet, the certificate doesn't exist
-	if cr.Status.AtProvider.Serial == "" {
+	// If no serial is available yet, the certificate doesn't exist on chain
+	if serial == "" {
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, nil
 	}
 
 	// Query certificate status from Akash network
-	certInfo, err := c.service.GetCertificate(ctx, cr.Status.AtProvider.Serial, owner)
+	certInfo, err := c.service.GetCertificate(ctx, serial, owner)
 	if err != nil {
 		// If certificate not found, it doesn't exist yet
 		if isCertificateNotFoundError(err) {
@@ -290,6 +301,8 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalCreation{}, errors.New(errNotCertificate)
 	}
 
+	fmt.Printf("Creating Certificate: %s\n", cr.Name)
+
 	// Validate domains
 	if len(cr.Spec.ForProvider.Domains) == 0 {
 		return managed.ExternalCreation{}, errors.New(errInvalidDomains)
@@ -309,6 +322,17 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	if err != nil {
 		return managed.ExternalCreation{}, errors.Wrap(err, errCreateCertificate)
 	}
+	fmt.Printf("Certificate broadcast OK: serial=%s state=%s\n", certInfo.Serial, certInfo.State)
+
+	// Persist the chain-side identity (cert serial) on the CR via the
+	// external-name annotation so subsequent Observe runs can query the
+	// chain even after the in-memory status is dropped.
+	annotations := cr.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+	annotations["crossplane.io/external-name"] = certInfo.Serial
+	cr.SetAnnotations(annotations)
 
 	// Update status with creation result
 	cr.Status.AtProvider.Serial = certInfo.Serial
@@ -330,7 +354,21 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 		cr.SetConditions(xpv1.Creating().WithMessage("Certificate creation in progress"))
 	}
 
-	return managed.ExternalCreation{}, nil
+	// Surface the cert + key PEMs as connection details so Crossplane's
+	// NewAPISecretPublisher writes them into the Secret referenced by
+	// spec.writeConnectionSecretToRef. Downstream resources (Manifest mTLS,
+	// provider lease-status calls) consume tls.crt + tls.key from that
+	// Secret. Standard kubernetes.io/tls keys are used so the Secret can be
+	// fed straight into a TLS-enabled HTTP client.
+	return managed.ExternalCreation{
+		ConnectionDetails: managed.ConnectionDetails{
+			"tls.crt": []byte(certInfo.PEM),
+			"tls.key": []byte(certInfo.PrivateKeyPEM),
+			"tls.pub": []byte(certInfo.PubkeyPEM),
+			"serial":  []byte(certInfo.Serial),
+			"owner":   []byte(certInfo.Owner),
+		},
+	}, nil
 }
 
 // Update handles certificate renewal
@@ -372,7 +410,17 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	cr.Status.AtProvider.LastRenewed = time.Now().Unix()
 	cr.Status.AtProvider.ExpiresAt = certInfo.ExpiresAt
 
-	return managed.ExternalUpdate{}, nil
+	// Renewal generated a new keypair — refresh the connection-details
+	// Secret so consumers always pick up the latest tls.key.
+	return managed.ExternalUpdate{
+		ConnectionDetails: managed.ConnectionDetails{
+			"tls.crt": []byte(certInfo.PEM),
+			"tls.key": []byte(certInfo.PrivateKeyPEM),
+			"tls.pub": []byte(certInfo.PubkeyPEM),
+			"serial":  []byte(certInfo.Serial),
+			"owner":   []byte(certInfo.Owner),
+		},
+	}, nil
 }
 
 // Delete revokes the certificate on the Akash network
@@ -382,20 +430,17 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalDelete{}, errors.New(errNotCertificate)
 	}
 
-	// If no serial, nothing to delete
-	if cr.Status.AtProvider.Serial == "" {
+	serial := cr.GetAnnotations()["crossplane.io/external-name"]
+	if serial == "" || serial == cr.Name {
 		return managed.ExternalDelete{}, nil
 	}
 
-	// Get owner address from ProviderConfig
 	owner, err := c.resolveOwnerAddress(ctx, cr)
 	if err != nil {
 		return managed.ExternalDelete{}, errors.Wrap(err, "failed to resolve owner address")
 	}
 
-	// Revoke certificate
-	err = c.service.RevokeCertificate(ctx, cr.Status.AtProvider.Serial, owner)
-	if err != nil {
+	if err := c.service.RevokeCertificate(ctx, serial, owner); err != nil {
 		return managed.ExternalDelete{}, errors.Wrap(err, errRevokeCertificate)
 	}
 

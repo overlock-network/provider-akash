@@ -6,421 +6,151 @@ you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
     http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
 */
 
 package client
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"encoding/pem"
 	"strings"
 	"testing"
 	"time"
+
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	certv1 "pkg.akt.dev/go/node/cert/v1"
 )
 
-func TestCreateCertificate(t *testing.T) {
-	tests := []struct {
-		name          string
-		domains       []string
-		owner         string
-		expectError   bool
-		errorContains string
-	}{
-		{
-			name:        "valid certificate creation",
-			domains:     []string{"example.com", "www.example.com"},
-			owner:       "akash1test",
-			expectError: false,
-		},
-		{
-			name:          "empty domains",
-			domains:       []string{},
-			owner:         "akash1test",
-			expectError:   true,
-			errorContains: "at least one domain is required",
-		},
-		{
-			name:          "empty owner",
-			domains:       []string{"example.com"},
-			owner:         "",
-			expectError:   true,
-			errorContains: "owner address is required",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			client := &AkashClient{}
-			certInfo, err := client.CreateCertificate(context.Background(), tt.domains, tt.owner)
-
-			if tt.expectError {
-				if err == nil {
-					t.Error("Expected error but got none")
-					return
-				}
-				if tt.errorContains != "" && !strings.Contains(err.Error(), tt.errorContains) {
-					t.Errorf("Expected error containing '%s', got: %v", tt.errorContains, err)
-				}
-				if certInfo != nil {
-					t.Error("Expected nil certInfo on error")
-				}
-			} else {
-				if err != nil {
-					t.Errorf("Unexpected error: %v", err)
-					return
-				}
-				if certInfo == nil {
-					t.Error("Expected certInfo but got nil")
-					return
-				}
-				if certInfo.Owner != tt.owner {
-					t.Errorf("Expected owner %s, got %s", tt.owner, certInfo.Owner)
-				}
-				if certInfo.State != CertificateStateValid {
-					t.Errorf("Expected state %s, got %s", CertificateStateValid, certInfo.State)
-				}
-				if certInfo.Serial == "" {
-					t.Error("Expected non-empty serial")
-				}
-				if certInfo.PEM == "" {
-					t.Error("Expected non-empty PEM")
-				}
-			}
-		})
-	}
+// mockAddress builds an sdk.AccAddress from a bech32 string for tests.
+// Falls back to an empty address if parsing fails so the test fails the
+// downstream assertion rather than the helper.
+func mockAddress(bech32 string) sdk.AccAddress {
+	addr, _ := sdk.AccAddressFromBech32(bech32)
+	return addr
 }
 
-func TestGetCertificate(t *testing.T) {
-	tests := []struct {
-		name          string
-		serial        string
-		owner         string
-		expectError   bool
-		errorContains string
-	}{
-		{
-			name:        "valid certificate retrieval",
-			serial:      "1234567890",
-			owner:       "akash1test",
-			expectError: false,
-		},
-		{
-			name:          "empty serial",
-			serial:        "",
-			owner:         "akash1test",
-			expectError:   true,
-			errorContains: "certificate serial is required",
-		},
-		{
-			name:          "empty owner",
-			serial:        "1234567890",
-			owner:         "",
-			expectError:   true,
-			errorContains: "owner address is required",
-		},
+func newTestContext() context.Context { return context.Background() }
+
+// TestBuildAkashCertificate exercises the in-memory certificate generation
+// (no chain interaction). The produced PEM blocks must round-trip through
+// chain-sdk's ParseAndValidateCertificate, which is what the on-chain
+// MsgCreateCertificate handler calls.
+func TestBuildAkashCertificate(t *testing.T) {
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			client := &AkashClient{}
-			certInfo, err := client.GetCertificate(context.Background(), tt.serial, tt.owner)
+	owner := "akash1hppmegxevqjvnz5z76vkrldgr323n8en5wa0jv"
+	notBefore := time.Now().UTC()
+	notAfter := notBefore.Add(time.Hour)
 
-			if tt.expectError {
-				if err == nil {
-					t.Error("Expected error but got none")
-					return
-				}
-				if tt.errorContains != "" && !strings.Contains(err.Error(), tt.errorContains) {
-					t.Errorf("Expected error containing '%s', got: %v", tt.errorContains, err)
-				}
-				if certInfo != nil {
-					t.Error("Expected nil certInfo on error")
-				}
-			} else {
-				if err != nil {
-					t.Errorf("Unexpected error: %v", err)
-					return
-				}
-				if certInfo == nil {
-					t.Error("Expected certInfo but got nil")
-					return
-				}
-				if certInfo.Serial != tt.serial {
-					t.Errorf("Expected serial %s, got %s", tt.serial, certInfo.Serial)
-				}
-				if certInfo.Owner != tt.owner {
-					t.Errorf("Expected owner %s, got %s", tt.owner, certInfo.Owner)
-				}
-				if certInfo.State != CertificateStateValid {
-					t.Errorf("Expected state %s, got %s", CertificateStateValid, certInfo.State)
-				}
-			}
-		})
-	}
-}
-
-func TestRevokeCertificate(t *testing.T) {
-	tests := []struct {
-		name          string
-		serial        string
-		owner         string
-		expectError   bool
-		errorContains string
-	}{
-		{
-			name:        "valid certificate revocation",
-			serial:      "1234567890",
-			owner:       "akash1test",
-			expectError: false,
-		},
-		{
-			name:          "empty serial",
-			serial:        "",
-			owner:         "akash1test",
-			expectError:   true,
-			errorContains: "certificate serial is required",
-		},
-		{
-			name:          "empty owner",
-			serial:        "1234567890",
-			owner:         "",
-			expectError:   true,
-			errorContains: "owner address is required",
-		},
+	certPEM, pubPEM, keyPEM, parsed, err := buildAkashCertificate(priv, owner, []string{"example.com"}, notBefore, notAfter)
+	if err != nil {
+		t.Fatalf("buildAkashCertificate: %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			client := &AkashClient{}
-			err := client.RevokeCertificate(context.Background(), tt.serial, tt.owner)
-
-			if tt.expectError {
-				if err == nil {
-					t.Error("Expected error but got none")
-					return
-				}
-				if tt.errorContains != "" && !strings.Contains(err.Error(), tt.errorContains) {
-					t.Errorf("Expected error containing '%s', got: %v", tt.errorContains, err)
-				}
-			} else {
-				if err != nil {
-					t.Errorf("Unexpected error: %v", err)
-				}
-			}
-		})
+	if parsed.Subject.CommonName != owner {
+		t.Errorf("Subject.CN = %q, want %q", parsed.Subject.CommonName, owner)
 	}
-}
-
-func TestGetCertificates(t *testing.T) {
-	tests := []struct {
-		name          string
-		owner         string
-		expectError   bool
-		errorContains string
-	}{
-		{
-			name:        "valid certificates listing",
-			owner:       "akash1test",
-			expectError: false,
-		},
-		{
-			name:          "empty owner",
-			owner:         "",
-			expectError:   true,
-			errorContains: "owner address is required",
-		},
+	if parsed.Issuer.CommonName != owner {
+		t.Errorf("Issuer.CN = %q, want %q (self-signed)", parsed.Issuer.CommonName, owner)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			client := &AkashClient{}
-			certs, err := client.GetCertificates(context.Background(), tt.owner)
+	for name, data := range map[string][]byte{
+		"cert":    certPEM,
+		"pubkey":  pubPEM,
+		"privkey": keyPEM,
+	} {
+		blk, _ := pem.Decode(data)
+		if blk == nil {
+			t.Fatalf("%s PEM did not decode", name)
+		}
+	}
 
-			if tt.expectError {
-				if err == nil {
-					t.Error("Expected error but got none")
-					return
-				}
-				if tt.errorContains != "" && !strings.Contains(err.Error(), tt.errorContains) {
-					t.Errorf("Expected error containing '%s', got: %v", tt.errorContains, err)
-				}
-				if certs != nil {
-					t.Error("Expected nil certs on error")
-				}
-			} else {
-				if err != nil {
-					t.Errorf("Unexpected error: %v", err)
-					return
-				}
-				if certs == nil {
-					t.Error("Expected certs but got nil")
-					return
-				}
-				if len(certs) != 1 {
-					t.Errorf("Expected 1 certificate, got %d", len(certs))
-					return
-				}
-				if certs[0].Owner != tt.owner {
-					t.Errorf("Expected owner %s, got %s", tt.owner, certs[0].Owner)
-				}
-			}
-		})
+	// Final gate: the chain-sdk validator must accept what we produced —
+	// otherwise MsgCreateCertificate will fail at the keeper.
+	if _, err := certv1.ParseAndValidateCertificate(mockAddress(owner), certPEM, pubPEM); err != nil {
+		t.Fatalf("chain-sdk validator rejected our certificate: %v", err)
 	}
 }
 
 func TestValidateCertificate(t *testing.T) {
-	tests := []struct {
-		name          string
-		certInfo      *CertificateInfo
-		autoRenew     bool
-		validityDays  int32
-		expectRenewal bool
-		expectError   bool
-		errorContains string
+	ak := &AkashClient{}
+
+	cases := []struct {
+		name      string
+		info      *CertificateInfo
+		autoRenew bool
+		want      bool
+		wantErr   bool
 	}{
+		{name: "nil info", info: nil, wantErr: true},
+		{name: "revoked is terminal", info: &CertificateInfo{State: CertificateStateRevoked}, wantErr: true},
 		{
-			name: "valid certificate - no renewal needed",
-			certInfo: &CertificateInfo{
-				State:     CertificateStateValid,
-				ExpiresAt: time.Now().Add(60 * 24 * time.Hour).Unix(), // 60 days from now
-			},
-			autoRenew:    true,
-			expectRenewal: false,
-			expectError:   false,
+			name:      "auto-renew off short-circuits",
+			info:      &CertificateInfo{State: CertificateStateValid, ExpiresAt: time.Now().Add(time.Hour).Unix()},
+			autoRenew: false,
+			want:      false,
 		},
 		{
-			name: "valid certificate - renewal needed",
-			certInfo: &CertificateInfo{
-				State:     CertificateStateValid,
-				ExpiresAt: time.Now().Add(15 * 24 * time.Hour).Unix(), // 15 days from now
-			},
-			autoRenew:    true,
-			expectRenewal: true,
-			expectError:   false,
+			name:      "renew when within 30d window",
+			info:      &CertificateInfo{State: CertificateStateValid, ExpiresAt: time.Now().Add(24 * time.Hour).Unix()},
+			autoRenew: true,
+			want:      true,
 		},
 		{
-			name: "expired certificate",
-			certInfo: &CertificateInfo{
-				State:     CertificateStateExpired,
-				ExpiresAt: time.Now().Add(-24 * time.Hour).Unix(), // 1 day ago
-			},
-			autoRenew:      true,
-			expectError:    true,
-			errorContains:  "certificate is expired",
-		},
-		{
-			name: "revoked certificate",
-			certInfo: &CertificateInfo{
-				State:     CertificateStateRevoked,
-				ExpiresAt: time.Now().Add(30 * 24 * time.Hour).Unix(),
-			},
-			autoRenew:     true,
-			expectError:   true,
-			errorContains: "certificate is revoked",
-		},
-		{
-			name:          "nil certificate info",
-			certInfo:      nil,
-			autoRenew:     true,
-			expectError:   true,
-			errorContains: "certificate info is required",
+			name:      "no renew when far from expiry",
+			info:      &CertificateInfo{State: CertificateStateValid, ExpiresAt: time.Now().Add(60 * 24 * time.Hour).Unix()},
+			autoRenew: true,
+			want:      false,
 		},
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			client := &AkashClient{}
-			needsRenewal, err := client.ValidateCertificate(tt.certInfo, tt.autoRenew, tt.validityDays)
-
-			if tt.expectError {
-				if err == nil {
-					t.Error("Expected error but got none")
-					return
-				}
-				if tt.errorContains != "" && !strings.Contains(err.Error(), tt.errorContains) {
-					t.Errorf("Expected error containing '%s', got: %v", tt.errorContains, err)
-				}
-			} else {
-				if err != nil {
-					t.Errorf("Unexpected error: %v", err)
-					return
-				}
-				if needsRenewal != tt.expectRenewal {
-					t.Errorf("Expected renewal %t, got %t", tt.expectRenewal, needsRenewal)
-				}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := ak.ValidateCertificate(tc.info, tc.autoRenew, 365)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err = %v, wantErr = %v", err, tc.wantErr)
+			}
+			if !tc.wantErr && got != tc.want {
+				t.Errorf("renew = %v, want %v", got, tc.want)
 			}
 		})
 	}
 }
 
-func TestGenerateCertificate(t *testing.T) {
-	tests := []struct {
-		name        string
-		domains     []string
-		expectError bool
-	}{
-		{
-			name:        "valid domains",
-			domains:     []string{"example.com", "www.example.com"},
-			expectError: false,
-		},
-		{
-			name:        "single domain",
-			domains:     []string{"test.com"},
-			expectError: false,
-		},
+func TestMapChainCertState(t *testing.T) {
+	cases := map[certv1.State]string{
+		certv1.CertificateValid:   CertificateStateValid,
+		certv1.CertificateRevoked: CertificateStateRevoked,
+		certv1.CertificateStateInvalid: "",
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			client := &AkashClient{}
-			certPEM, cert, err := client.generateCertificate(tt.domains)
-
-			if tt.expectError {
-				if err == nil {
-					t.Error("Expected error but got none")
-				}
-			} else {
-				if err != nil {
-					t.Errorf("Unexpected error: %v", err)
-					return
-				}
-				if certPEM == "" {
-					t.Error("Expected non-empty PEM")
-				}
-				if cert == nil {
-					t.Error("Expected cert but got nil")
-					return
-				}
-				if cert.Subject.CommonName != tt.domains[0] {
-					t.Errorf("Expected CommonName %s, got %s", tt.domains[0], cert.Subject.CommonName)
-				}
-				if len(cert.DNSNames) != len(tt.domains) {
-					t.Errorf("Expected %d DNS names, got %d", len(tt.domains), len(cert.DNSNames))
-				}
-				if cert.SerialNumber == nil {
-					t.Error("Expected non-nil serial number")
-				}
-			}
-		})
-	}
-}
-
-func TestCertificateConstants(t *testing.T) {
-	expectedStates := map[string]string{
-		"valid":   CertificateStateValid,
-		"expired": CertificateStateExpired,
-		"revoked": CertificateStateRevoked,
-	}
-
-	for expected, actual := range expectedStates {
-		if actual != expected {
-			t.Errorf("Expected certificate state %s, got %s", expected, actual)
+	for in, want := range cases {
+		if got := mapChainCertState(in); got != want {
+			t.Errorf("mapChainCertState(%v) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// TestInputValidation covers the early returns in the chain-touching methods
+// — they don't reach the network when inputs are missing.
+func TestInputValidation(t *testing.T) {
+	ak := &AkashClient{}
+	ctx := newTestContext()
+
+	if _, err := ak.CreateCertificate(ctx, nil, ""); err == nil || !strings.Contains(err.Error(), "owner") {
+		t.Errorf("CreateCertificate with empty owner: want owner error, got %v", err)
+	}
+	if _, err := ak.GetCertificate(ctx, "", ""); err == nil {
+		t.Errorf("GetCertificate with empty inputs: expected error")
+	}
+	if err := ak.RevokeCertificate(ctx, "", ""); err == nil {
+		t.Errorf("RevokeCertificate with empty inputs: expected error")
+	}
+	if _, err := ak.GetCertificates(ctx, ""); err == nil {
+		t.Errorf("GetCertificates with empty owner: expected error")
 	}
 }
