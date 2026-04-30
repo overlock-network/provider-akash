@@ -25,9 +25,6 @@ spec:
     - jsonPath: .status.conditions[?(@.type=='Synced')].status
       name: SYNCED
       type: string
-    - jsonPath: .status.atProvider.deploymentId
-      name: DSEQ
-      type: string
     - jsonPath: .status.atProvider.state
       name: STATE
       type: string
@@ -43,8 +40,8 @@ spec:
     - jsonPath: .status.atProvider.leasesActive
       name: LEASES
       type: integer
-    - jsonPath: .status.atProvider.owner
-      name: OWNER
+    - jsonPath: .metadata.annotations['crossplane\.io/external-name']
+      name: EXTERNAL-NAME
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: AGE
