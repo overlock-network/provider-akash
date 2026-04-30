@@ -30,7 +30,6 @@ spec:
             region: us-west
           pricing:
             web:
-              denom: uakt
               amount: 100
     deployment:
       web:

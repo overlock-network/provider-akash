@@ -11,11 +11,8 @@ spec:
       name: simple-web-app
       namespace: default
 
-    # Deployment deposit in uakt (5 AKT = 5,000,000 uakt)
+    # Deployment deposit in uact (node v2 BME — denom is fixed to uact)
     deposit: 5000000
-    
-    # Token denomination
-    currency: uakt
 
   # Connection secret for deployment details
   writeConnectionSecretToRef:

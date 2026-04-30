@@ -273,14 +273,10 @@ type SDLSignedBy struct {
 	AllOf []string `json:"allOf,omitempty"`
 }
 
-// SDLPricing defines pricing information for a service
+// SDLPricing defines pricing information for a service.
+// Node v2 BME hard-codes the price denom to uact, so it is not user-configurable.
 type SDLPricing struct {
-	// Denom is the token denomination (e.g., "uakt")
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=uakt;akt;ibc/170C677610AC31DF0904FFE09CD3B5C657492170E7E52372E48756B71E56F2F1
-	Denom string `json:"denom"`
-
-	// Amount is the price amount in the specified denomination
+	// Amount is the price amount in uact
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Minimum=1
 	Amount int64 `json:"amount"`

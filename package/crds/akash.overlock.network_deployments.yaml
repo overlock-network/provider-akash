@@ -80,17 +80,11 @@ spec:
                 description: DeploymentParameters are the configurable fields of a
                   Deployment.
                 properties:
-                  currency:
-                    default: uakt
-                    description: Currency is the token denomination (default "uakt")
-                    enum:
-                    - uakt
-                    - akt
-                    type: string
                   deposit:
                     default: 5000000
-                    description: Deposit is the deployment deposit amount in uakt
-                      (minimum 500000, default 5000000)
+                    description: |-
+                      Deposit is the deployment deposit amount in uact (minimum 500000, default 5000000).
+                      Node v2 BME hard-codes the deposit denom to uact, so it is not user-configurable.
                     format: int64
                     maximum: 1000000000000
                     minimum: 500000

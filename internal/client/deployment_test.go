@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	clienttypes "github.com/overlock-network/provider-akash/internal/client/types"
-	deploymenttypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	deploymenttypes "pkg.akt.dev/go/node/deployment/v1beta4"
 )
 
 func TestParseSDLToGroupSpecs(t *testing.T) {
@@ -49,7 +49,6 @@ profiles:
           - "akash1365yvmc4s7awdyj3n2sav7xfx76adc6dnmlx63"
       pricing:
         web: 
-          denom: uakt
           amount: 1000
 deployment:
   web:
@@ -79,8 +78,8 @@ deployment:
 					t.Errorf("Expected count 1, got %d", resource.Count)
 				}
 
-				if resource.Price.Denom != "uakt" {
-					t.Errorf("Expected price denom 'uakt', got '%s'", resource.Price.Denom)
+				if resource.Price.Denom != "uact" {
+					t.Errorf("Expected price denom 'uact', got '%s'", resource.Price.Denom)
 				}
 
 				// Check price amount (convert to string for comparison)
@@ -166,7 +165,6 @@ profiles:
     web:
       pricing:
         web:
-          denom: uakt
           amount: 1000
 deployment:
   web:
@@ -197,7 +195,6 @@ profiles:
     web:
       pricing:
         web:
-          denom: uakt
           amount: 1000
 deployment:
   web:
@@ -370,7 +367,7 @@ func TestValidateSDL(t *testing.T) {
 					Placement: map[string]clienttypes.SDLPlacementProfile{
 						"web": {
 							Pricing: map[string]clienttypes.SDLPricing{
-								"web": {Denom: "uakt", Amount: 1000},
+								"web": {Amount: 1000},
 							},
 						},
 					},
@@ -420,7 +417,7 @@ func TestValidateSDL(t *testing.T) {
 					Placement: map[string]clienttypes.SDLPlacementProfile{
 						"web": {
 							Pricing: map[string]clienttypes.SDLPricing{
-								"web": {Denom: "uakt", Amount: 1000},
+								"web": {Amount: 1000},
 							},
 						},
 					},

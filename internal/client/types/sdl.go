@@ -167,10 +167,10 @@ type SDLSignedBy struct {
 	AllOf []string `yaml:"allOf,omitempty"`
 }
 
-// SDLPricing defines pricing information for a service
+// SDLPricing defines pricing information for a service.
+// Denom is fixed to uact under node v2 BME and is not part of the SDL spec.
 type SDLPricing struct {
-	Denom  string `yaml:"denom"`
-	Amount int64  `yaml:"amount"`
+	Amount int64 `yaml:"amount"`
 }
 
 // SDLDeploymentGroup defines the deployment configuration for a service

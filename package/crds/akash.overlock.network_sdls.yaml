@@ -184,26 +184,17 @@ spec:
                               type: object
                             pricing:
                               additionalProperties:
-                                description: SDLPricing defines pricing information
-                                  for a service
+                                description: |-
+                                  SDLPricing defines pricing information for a service.
+                                  Node v2 BME hard-codes the price denom to uact, so it is not user-configurable.
                                 properties:
                                   amount:
-                                    description: Amount is the price amount in the
-                                      specified denomination
+                                    description: Amount is the price amount in uact
                                     format: int64
                                     minimum: 1
                                     type: integer
-                                  denom:
-                                    description: Denom is the token denomination (e.g.,
-                                      "uakt")
-                                    enum:
-                                    - uakt
-                                    - akt
-                                    - ibc/170C677610AC31DF0904FFE09CD3B5C657492170E7E52372E48756B71E56F2F1
-                                    type: string
                                 required:
                                 - amount
-                                - denom
                                 type: object
                               description: Pricing defines pricing information for
                                 services
