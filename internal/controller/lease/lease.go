@@ -104,13 +104,13 @@ func (s *LeaseService) CreateLeaseFromBid(ctx context.Context, owner, dseq, gseq
 		Oseq: oseq,
 	}
 
-	// Call Akash CLI to create the lease
-	result, err := s.client.CreateLease(seqs, provider)
+	// Broadcast MsgCreateLease via chain-sdk
+	txhash, err := s.client.CreateLease(ctx, seqs, provider)
 	if err != nil {
-		return "", fmt.Errorf("failed to create lease via Akash CLI: %w", err)
+		return "", fmt.Errorf("failed to create lease: %w", err)
 	}
 
-	return result, nil
+	return txhash, nil
 }
 
 // CreateLeaseFromStructuredID creates a lease using structured LeaseID (more efficient)
@@ -138,17 +138,16 @@ func (s *LeaseService) GetLease(ctx context.Context, leaseId string) (*akashv1al
 		Oseq: oseq,
 	}
 
-	// Query lease details via Akash CLI (if client is available)
+	// Query lease state from chain
+	state := stateActive
 	if s.client != nil {
-		result, err := s.client.GetLease(seqs, provider)
+		chainState, err := s.client.GetLease(ctx, seqs, provider)
 		if err != nil {
-			fmt.Printf("Failed to query lease details via CLI: %v\n", err)
-		} else {
-			fmt.Printf("Lease query result: %s\n", result)
+			return nil, fmt.Errorf("failed to query lease %s on chain: %w", leaseId, err)
 		}
+		state = chainState
 	}
 
-	// Return lease observation with data from CLI or parsed from ID
 	lease := &akashv1alpha1.LeaseObservation{
 		LeaseId:  leaseId,
 		Owner:    owner,
@@ -156,7 +155,7 @@ func (s *LeaseService) GetLease(ctx context.Context, leaseId string) (*akashv1al
 		Gseq:     gseq,
 		Oseq:     oseq,
 		Provider: provider,
-		State:    stateActive, // Would parse from CLI result in production
+		State:    state,
 	}
 
 	return lease, nil
@@ -177,16 +176,16 @@ func (s *LeaseService) CloseLease(ctx context.Context, leaseId string) error {
 		Oseq: oseq,
 	}
 
-	if s.client != nil {
-		result, err := s.client.CloseLease(seqs, provider)
-		if err != nil {
-			return fmt.Errorf("failed to close lease %s via Akash CLI: %w", leaseId, err)
-		}
-		fmt.Printf("Lease %s closed successfully: %s\n", leaseId, result)
-	} else {
+	if s.client == nil {
 		fmt.Printf("Would close lease: %s (client not available)\n", leaseId)
+		return nil
 	}
 
+	txhash, err := s.client.CloseLease(ctx, seqs, provider)
+	if err != nil {
+		return fmt.Errorf("failed to close lease %s: %w", leaseId, err)
+	}
+	fmt.Printf("Lease %s closed successfully (tx %s)\n", leaseId, txhash)
 	return nil
 }
 

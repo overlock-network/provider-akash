@@ -31,6 +31,18 @@ spec:
     - jsonPath: .status.atProvider.state
       name: STATE
       type: string
+    - jsonPath: .status.atProvider.phase
+      name: PHASE
+      type: string
+    - jsonPath: .status.atProvider.ordersOpen
+      name: ORDERS
+      type: integer
+    - jsonPath: .status.atProvider.bidsOpen
+      name: BIDS
+      type: integer
+    - jsonPath: .status.atProvider.leasesActive
+      name: LEASES
+      type: integer
     - jsonPath: .status.atProvider.owner
       name: OWNER
       type: string
@@ -280,6 +292,12 @@ spec:
                 description: DeploymentObservation are the observable fields of a
                   Deployment.
                 properties:
+                  bidsOpen:
+                    description: |-
+                      BidsOpen is the count of currently-open bids on chain for this
+                      deployment. Useful for diagnosing #29-style "no bids" reports.
+                    format: int32
+                    type: integer
                   createdHeight:
                     description: CreatedHeight is the block height when deployment
                       was created
@@ -297,12 +315,38 @@ spec:
                       denom:
                         type: string
                     type: object
+                  leasesActive:
+                    description: |-
+                      LeasesActive is the count of currently-active leases on chain for this
+                      deployment, contributing to the Phase derivation.
+                    format: int32
+                    type: integer
+                  ordersOpen:
+                    description: |-
+                      OrdersOpen is the count of currently-open orders on chain for this
+                      deployment, contributing to the Phase derivation.
+                    format: int32
+                    type: integer
                   owner:
                     description: Owner is the deployment owner address from ProviderConfig
                     type: string
+                  phase:
+                    description: |-
+                      Phase is a derived high-level lifecycle phase for the Deployment that
+                      folds in market state (orders, leases) so users can see why bids may
+                      not be appearing without reading multiple resources. Possible values:
+                        - "Pending"   : not yet broadcast to chain
+                        - "Bidding"   : on chain, an order is open and providers may bid
+                        - "Leased"    : at least one lease is active
+                        - "Expired"   : on chain, no leases active and no orders open
+                                        (typical "console-expired" deployment past bid window)
+                        - "Closed"    : chain marked the deployment closed (escrow drained
+                                        or owner closed it)
+                    type: string
                   state:
-                    description: State is the current deployment state from Akash
-                      network
+                    description: |-
+                      State is the raw deployment state reported by Akash chain ("active",
+                      "closed").
                     type: string
                   version:
                     description: Version is the deployment version

@@ -44,6 +44,9 @@ import (
 	client "github.com/overlock-network/provider-akash/internal/client"
 	clienttypes "github.com/overlock-network/provider-akash/internal/client/types"
 	"github.com/overlock-network/provider-akash/internal/features"
+
+	marketv1 "pkg.akt.dev/go/node/market/v1"
+	marketv1beta5 "pkg.akt.dev/go/node/market/v1beta5"
 )
 
 const (
@@ -215,6 +218,13 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	cr.Status.AtProvider.DeploymentId = deployment.DeploymentInfo.DeploymentId.Dseq
 	cr.Status.AtProvider.State = deployment.DeploymentInfo.State
 	cr.Status.AtProvider.Owner = deployment.DeploymentInfo.DeploymentId.Owner
+
+	// Derive the high-level Phase by combining chain Deployment.State with
+	// market state (orders / bids / leases). This is what surfaces as the
+	// PHASE column and answers "why aren't there any bids?" without users
+	// having to cross-reference market queries by hand.
+	phase := c.derivePhase(ctx, deployment.DeploymentInfo.State, dseq, owner, cr)
+	cr.Status.AtProvider.Phase = phase
 
 	// Update escrow balance information if available
 	if deployment.EscrowAccount.Balance.Denom != "" {
@@ -530,6 +540,81 @@ func setStatusCondition(cr *v1alpha1.Deployment, conditionType xpv1.ConditionTyp
 		Reason:             reason,
 		Message:            message,
 	})
+}
+
+// Deployment phases — high-level lifecycle states surfaced on the CR's
+// status.atProvider.phase. See DeploymentObservation.Phase for semantics.
+const (
+	phasePending = "Pending"
+	phaseBidding = "Bidding"
+	phaseLeased  = "Leased"
+	phaseExpired = "Expired"
+	phaseClosed  = "Closed"
+)
+
+// derivePhase folds chain Deployment.State together with the deployment's
+// market state (orders + bids + leases) into a single user-facing Phase.
+// It is best-effort: any market-query failure leaves the count fields at zero
+// and falls back to phasePending/phaseBidding based on chain state alone, so
+// the Deployment reconcile is never blocked by transient market query errors.
+func (c *external) derivePhase(ctx context.Context, chainState, dseq, owner string, cr *v1alpha1.Deployment) string {
+	// Closed on chain wins: nothing else matters.
+	if chainState == "closed" {
+		cr.Status.AtProvider.OrdersOpen = 0
+		cr.Status.AtProvider.BidsOpen = 0
+		cr.Status.AtProvider.LeasesActive = 0
+		return phaseClosed
+	}
+
+	leases, err := c.service.client.GetLeases(ctx, dseq, owner)
+	if err != nil {
+		fmt.Printf("derivePhase: failed to query leases for %s: %v\n", dseq, err)
+	}
+	orders, err := c.service.client.GetOrders(ctx, dseq, owner)
+	if err != nil {
+		fmt.Printf("derivePhase: failed to query orders for %s: %v\n", dseq, err)
+	}
+	bids, err := c.service.client.GetBids(ctx, dseq, owner)
+	if err != nil {
+		fmt.Printf("derivePhase: failed to query bids for %s: %v\n", dseq, err)
+	}
+
+	leasesActive := 0
+	for _, l := range leases {
+		if l.State == marketv1.LeaseActive {
+			leasesActive++
+		}
+	}
+	ordersOpen := 0
+	for _, o := range orders {
+		if o.State == marketv1beta5.OrderOpen {
+			ordersOpen++
+		}
+	}
+	bidsOpen := 0
+	for _, b := range bids {
+		if b.State == "open" {
+			bidsOpen++
+		}
+	}
+
+	cr.Status.AtProvider.OrdersOpen = int32(ordersOpen)
+	cr.Status.AtProvider.BidsOpen = int32(bidsOpen)
+	cr.Status.AtProvider.LeasesActive = int32(leasesActive)
+
+	switch {
+	case leasesActive > 0:
+		return phaseLeased
+	case ordersOpen > 0:
+		return phaseBidding
+	case len(orders) > 0:
+		// Orders exist but all closed and no leases — the bid window
+		// passed without producing a lease. Console calls this "expired".
+		return phaseExpired
+	default:
+		// No orders observed yet (block freshly committed, or query lag).
+		return phaseBidding
+	}
 }
 
 // setReadyCondition sets the Ready condition based on deployment state

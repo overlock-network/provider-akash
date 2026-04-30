@@ -66,8 +66,33 @@ type DeploymentObservation struct {
 	// Owner is the deployment owner address from ProviderConfig
 	Owner string `json:"owner,omitempty"`
 
-	// State is the current deployment state from Akash network
+	// State is the raw deployment state reported by Akash chain ("active",
+	// "closed").
 	State string `json:"state,omitempty"`
+
+	// Phase is a derived high-level lifecycle phase for the Deployment that
+	// folds in market state (orders, leases) so users can see why bids may
+	// not be appearing without reading multiple resources. Possible values:
+	//   - "Pending"   : not yet broadcast to chain
+	//   - "Bidding"   : on chain, an order is open and providers may bid
+	//   - "Leased"    : at least one lease is active
+	//   - "Expired"   : on chain, no leases active and no orders open
+	//                   (typical "console-expired" deployment past bid window)
+	//   - "Closed"    : chain marked the deployment closed (escrow drained
+	//                   or owner closed it)
+	Phase string `json:"phase,omitempty"`
+
+	// OrdersOpen is the count of currently-open orders on chain for this
+	// deployment, contributing to the Phase derivation.
+	OrdersOpen int32 `json:"ordersOpen,omitempty"`
+
+	// LeasesActive is the count of currently-active leases on chain for this
+	// deployment, contributing to the Phase derivation.
+	LeasesActive int32 `json:"leasesActive,omitempty"`
+
+	// BidsOpen is the count of currently-open bids on chain for this
+	// deployment. Useful for diagnosing #29-style "no bids" reports.
+	BidsOpen int32 `json:"bidsOpen,omitempty"`
 
 	// CreatedHeight is the block height when deployment was created
 	CreatedHeight int64 `json:"createdHeight,omitempty"`
@@ -106,6 +131,10 @@ type DeploymentStatus struct {
 // +kubebuilder:printcolumn:name="SYNCED",type="string",JSONPath=".status.conditions[?(@.type=='Synced')].status"
 // +kubebuilder:printcolumn:name="DSEQ",type="string",JSONPath=".status.atProvider.deploymentId"
 // +kubebuilder:printcolumn:name="STATE",type="string",JSONPath=".status.atProvider.state"
+// +kubebuilder:printcolumn:name="PHASE",type="string",JSONPath=".status.atProvider.phase"
+// +kubebuilder:printcolumn:name="ORDERS",type="integer",JSONPath=".status.atProvider.ordersOpen"
+// +kubebuilder:printcolumn:name="BIDS",type="integer",JSONPath=".status.atProvider.bidsOpen"
+// +kubebuilder:printcolumn:name="LEASES",type="integer",JSONPath=".status.atProvider.leasesActive"
 // +kubebuilder:printcolumn:name="OWNER",type="string",JSONPath=".status.atProvider.owner"
 // +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:subresource:status
