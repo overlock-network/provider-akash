@@ -5,11 +5,11 @@ metadata:
   namespace: crossplane-system
 type: Opaque
 stringData:
-  # Your Akash sandbox wallet mnemonic (24-word seed phrase).
-  # Create a sandbox key:
-  #   akash keys add sandbox-key --keyring-backend test
+  # Your Akash sandbox wallet private key (hex-encoded).
+  # Export from an existing key:
+  #   akash keys export sandbox-key --keyring-backend test --unarmored-hex --unsafe
   # Then fund it from the sandbox faucet: https://faucet.sandbox-01.aksh.pw/
-  credentials: "<your-sandbox-wallet-mnemonic-here>"
+  privateKey: "<your-sandbox-wallet-private-key-hex-here>"
 
 ---
 
@@ -23,7 +23,7 @@ spec:
     secretRef:
       namespace: crossplane-system
       name: akash-sandbox-wallet-secret
-      key: credentials
+      key: privateKey
   configuration:
     keyName: "sandbox-key"
     keyringBackend: "test"

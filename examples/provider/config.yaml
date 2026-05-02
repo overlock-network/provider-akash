@@ -5,10 +5,10 @@ metadata:
   namespace: crossplane-system
 type: Opaque
 stringData:
-  # Your Akash wallet mnemonic (24-word seed phrase).
+  # Your Akash wallet private key (hex-encoded).
   # Export from an existing key:
   #   akash keys export <key-name> --keyring-backend os --unarmored-hex --unsafe
-  credentials: "<your-wallet-mnemonic-here>"
+  privateKey: "<your-wallet-private-key-hex-here>"
 
 ---
 
@@ -22,7 +22,7 @@ spec:
     secretRef:
       namespace: crossplane-system
       name: akash-wallet-secret
-      key: credentials
+      key: privateKey
   configuration:
     keyName: "default"
     keyringBackend: "os"
