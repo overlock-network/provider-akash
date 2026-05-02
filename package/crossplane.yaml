@@ -3,11 +3,22 @@ kind: Provider
 metadata:
   name: provider-akash
   annotations:
-    meta.crossplane.io/maintainer: Crossplane Maintainers <info@crossplane.io>
+    meta.crossplane.io/maintainer: Overlock Network <provider-akash@overlock.network>
     meta.crossplane.io/source: github.com/overlock-network/provider-akash
     meta.crossplane.io/license: Apache-2.0
+    meta.crossplane.io/category: compute
+    meta.crossplane.io/iconURI: https://raw.githubusercontent.com/overlock-network/provider-akash/main/assets/akash-red-t-icon.png
     meta.crossplane.io/description: |
-      A akash that can be used to create Crossplane providers.
+      Manage Akash Network resources (deployments, leases, certificates,
+      manifests) declaratively from Kubernetes via Crossplane.
+    meta.crossplane.io/readme: |
+      `provider-akash` lets Crossplane reconcile Akash Network workloads
+      directly from Kubernetes manifests. It owns the full lifecycle —
+      ProviderConfig, SDL, Deployment, BidPolicy, Lease, Certificate,
+      Manifest — broadcasting on-chain transactions and delivering the
+      manifest to providers over mTLS. Deposits and lease pricing use
+      ACT (uact); gas is paid in AKT (uakt) under the v2 BME economy.
+      See the project README and `docs/` for setup.
 spec:
   controller:
     permissionRequests:
