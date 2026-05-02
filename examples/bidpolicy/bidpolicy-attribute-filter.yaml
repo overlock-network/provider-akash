@@ -1,0 +1,21 @@
+apiVersion: akash.overlock.network/v1alpha1
+kind: BidPolicy
+metadata:
+  name: attribute-filter
+spec:
+  providerConfigRef:
+    name: default
+  forProvider:
+    selector:
+      matchLabels:
+        app: simple-web
+    selectionStrategy: best-score
+    # Only accept bids from providers that advertise these attributes
+    requiredAttributes:
+      - key: region
+        value: us-west
+      - key: tier
+        value: premium
+    # Require a minimum provider reputation score (0-100)
+    minProviderScore: 80
+    maxBids: 10

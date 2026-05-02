@@ -1,16 +1,16 @@
 apiVersion: akash.overlock.network/v1alpha1
 kind: SDL
 metadata:
-  name: simple-web-app
+  name: simple-web
   namespace: default
 spec:
   providerConfigRef:
-    name: sandbox
+    name: default
   forProvider:
     version: "2.0"
     services:
       web:
-        image: nginx:1.21.6
+        image: nginx:1.25
         expose:
           - port: 80
             as: 80

@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: akash-sandbox-wallet-secret
+  namespace: crossplane-system
+type: Opaque
+stringData:
+  # Your Akash sandbox wallet mnemonic (24-word seed phrase).
+  # Create a sandbox key:
+  #   akash keys add sandbox-key --keyring-backend test
+  # Then fund it from the sandbox faucet: https://faucet.sandbox-01.aksh.pw/
+  credentials: "<your-sandbox-wallet-mnemonic-here>"
+
+---
+
+apiVersion: akash.overlock.network/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: sandbox
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: akash-sandbox-wallet-secret
+      key: credentials
+  configuration:
+    keyName: "sandbox-key"
+    keyringBackend: "test"
+    net: "sandbox"
+    chainId: "sandbox-01"
+    node: "https://rpc.sandbox-01.aksh.pw:443"
+    providersApi: "https://api.sandbox-01.aksh.pw"

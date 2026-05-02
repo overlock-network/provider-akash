@@ -1,0 +1,46 @@
+apiVersion: akash.overlock.network/v1alpha1
+kind: SDL
+metadata:
+  name: postgres-persistent
+  namespace: default
+spec:
+  providerConfigRef:
+    name: default
+  forProvider:
+    version: "2.0"
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          - POSTGRES_DB=mydb
+          - POSTGRES_USER=myuser
+          - POSTGRES_PASSWORD=changeme
+        expose:
+          - port: 5432
+            as: 5432
+            to:
+              - global: false
+        params:
+          storage:
+            data:
+              mount: /var/lib/postgresql/data
+    profiles:
+      compute:
+        postgres:
+          resources:
+            cpu: "1"
+            memory: "1Gi"
+            storage:
+              - size: "512Mi"
+              - name: data
+                size: "20Gi"
+                class: beta3
+      placement:
+        global:
+          pricing:
+            postgres:
+              amount: 500
+    deployment:
+      postgres:
+        profile: global
+        count: 1

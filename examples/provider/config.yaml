@@ -1,71 +1,32 @@
 apiVersion: v1
 kind: Secret
 metadata:
-  name: example-provider-secret
+  name: akash-wallet-secret
+  namespace: crossplane-system
 type: Opaque
-data:
-  credentials: "RVhBTVBMRQo="
+stringData:
+  # Your Akash wallet mnemonic (24-word seed phrase).
+  # Export from an existing key:
+  #   akash keys export <key-name> --keyring-backend os --unarmored-hex --unsafe
+  credentials: "<your-wallet-mnemonic-here>"
 
 ---
 
 apiVersion: akash.overlock.network/v1alpha1
 kind: ProviderConfig
 metadata:
-  name: example
+  name: default
 spec:
   credentials:
     source: Secret
     secretRef:
-      namespace: default
-      name: example-provider-secret
+      namespace: crossplane-system
+      name: akash-wallet-secret
       key: credentials
   configuration:
     keyName: "default"
-    keyringBackend: "test"
+    keyringBackend: "os"
     net: "mainnet"
-    version: "0.18.0"
     chainId: "akashnet-2"
     node: "https://rpc.akashnet.io:443"
-    home: "/tmp/.akash"
-    path: "/usr/local/bin/akash"
     providersApi: "https://akash-api.polkachu.com"
-
----
-
-apiVersion: akash.overlock.network/v1alpha1
-kind: SDL
-metadata:
-  name: simple-web-app
-  namespace: default
-spec:
-  providerConfigRef:
-    name: sandbox
-  forProvider:
-    version: "2.0"
-    services:
-      web:
-        image: nginx:1.21.6
-        expose:
-          - port: 80
-            as: 80
-            to:
-              - global: true
-    profiles:
-      compute:
-        web:
-          resources:
-            cpu: "0.5"
-            memory: "512Mi"
-            storage:
-              - size: "1Gi"
-      placement:
-        westcoast:
-          attributes:
-            region: us-west
-          pricing:
-            web:
-              amount: 100
-    deployment:
-      web:
-        profile: westcoast
-        count: 1

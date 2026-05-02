@@ -1,0 +1,45 @@
+apiVersion: akash.overlock.network/v1alpha1
+kind: SDL
+metadata:
+  name: gpu-workload
+  namespace: default
+spec:
+  providerConfigRef:
+    name: default
+  forProvider:
+    version: "2.0"
+    services:
+      jupyter:
+        image: jupyter/base-notebook:latest
+        env:
+          - JUPYTER_ENABLE_LAB=yes
+        expose:
+          - port: 8888
+            as: 8888
+            to:
+              - global: true
+    profiles:
+      compute:
+        jupyter:
+          resources:
+            cpu: "4"
+            memory: "8Gi"
+            storage:
+              - size: "10Gi"
+            gpu:
+              units: 1
+              attributes:
+                vendor:
+                  nvidia:
+                    - model: rtx3090
+      placement:
+        gpu-providers:
+          attributes:
+            capabilities/gpu/vendor/nvidia/model/rtx3090: "true"
+          pricing:
+            jupyter:
+              amount: 5000
+    deployment:
+      jupyter:
+        profile: gpu-providers
+        count: 1
