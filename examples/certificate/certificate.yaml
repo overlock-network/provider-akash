@@ -6,6 +6,11 @@ metadata:
 spec:
   providerConfigRef:
     name: default
+  # Publish tls.crt/tls.key as a Secret. The Manifest CR points at this
+  # same Secret via certificateSecretRef.
+  writeConnectionSecretToRef:
+    name: web-app-cert-conn
+    namespace: default
   forProvider:
     domains:
       - example.com

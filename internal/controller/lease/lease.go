@@ -314,13 +314,12 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 
 	fmt.Printf("Observing Lease: %s\n", cr.Name)
 
-	// During CR deletion, skip resolveReferences (parent Deployment may
-	// have been GC'd alongside us) and decide ResourceExists from the
-	// chain state we already observed. ResourceExists=true while the
-	// chain lease is still Active makes Crossplane call Delete (which
-	// broadcasts MsgCloseLease); once the chain transitions to Closed
-	// we report ResourceExists=false so the finalizer clears.
 	if cr.GetDeletionTimestamp() != nil {
+		if cr.Status.AtProvider.LeaseId != "" {
+			if lease, err := c.service.GetLease(ctx, cr.Status.AtProvider.LeaseId); err == nil {
+				cr.Status.AtProvider.State = lease.State
+			}
+		}
 		if cr.Status.AtProvider.State == stateActive {
 			return managed.ExternalObservation{ResourceExists: true, ResourceUpToDate: true}, nil
 		}
@@ -330,8 +329,6 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	err := c.resolveReferences(ctx, cr)
 	if err != nil {
 		if apierrors.IsNotFound(errors.Cause(err)) {
-			// Parent Deployment is gone — surface as "external resource
-			// gone" so the reconciler clears finalizers cleanly.
 			return managed.ExternalObservation{ResourceExists: false}, nil
 		}
 		c.setFailedState(cr, fmt.Sprintf("Failed to resolve references: %v", err))
@@ -361,6 +358,12 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		case stateActive:
 			cr.SetConditions(xpv1.ReconcileSuccess().WithMessage("Lease active"))
 			cr.SetConditions(xpv1.Available().WithMessage("Lease is active"))
+			if err := c.ensureCertificate(ctx, cr); err != nil {
+				fmt.Printf("ensureCertificate failed: %v\n", err)
+			}
+			if err := c.ensureManifest(ctx, cr); err != nil {
+				fmt.Printf("ensureManifest failed: %v\n", err)
+			}
 		case stateClosed:
 			cr.SetConditions(xpv1.ReconcileSuccess().WithMessage("Lease closed"))
 			cr.SetConditions(xpv1.Unavailable().WithMessage("Lease is closed"))
@@ -770,4 +773,126 @@ func extractHostFromURI(uri string) string {
 	}
 
 	return uri
+}
+
+// certResourceName returns the auto-created Certificate CR name for a ProviderConfig.
+func certResourceName(providerConfigName string) string {
+	return providerConfigName + "-cert"
+}
+
+// certSecretName returns the Secret name holding the Certificate's tls.crt/tls.key.
+func certSecretName(providerConfigName string) string {
+	return providerConfigName + "-cert-secret"
+}
+
+// ensureCertificate creates the Certificate CR for the Lease's ProviderConfig if missing.
+func (c *external) ensureCertificate(ctx context.Context, lease *akashv1alpha1.Lease) error {
+	pcRef := lease.GetProviderConfigReference()
+	if pcRef == nil || pcRef.Name == "" {
+		return fmt.Errorf("Lease has no providerConfigRef")
+	}
+	name := certResourceName(pcRef.Name)
+	existing := &akashv1alpha1.Certificate{}
+	err := c.service.kubeClient.Get(ctx, kubeclient.ObjectKey{Name: name}, existing)
+	if err == nil {
+		return nil
+	}
+	if !apierrors.IsNotFound(err) {
+		return fmt.Errorf("get Certificate %s: %w", name, err)
+	}
+
+	secretNS := lease.GetNamespace()
+	if secretNS == "" {
+		secretNS = "default"
+	}
+
+	cert := &akashv1alpha1.Certificate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+			Labels: map[string]string{
+				"akash.overlock.network/providerconfig": pcRef.Name,
+				"akash.overlock.network/managed-by":     "lease",
+			},
+		},
+		Spec: akashv1alpha1.CertificateSpec{
+			ResourceSpec: xpv1.ResourceSpec{
+				ProviderConfigReference: pcRef,
+				WriteConnectionSecretToReference: &xpv1.SecretReference{
+					Name:      certSecretName(pcRef.Name),
+					Namespace: secretNS,
+				},
+			},
+			ForProvider: akashv1alpha1.CertificateParameters{
+				Domains:      []string{"example.com"},
+				AutoRenew:    func() *bool { b := false; return &b }(),
+				ValidityDays: func() *int32 { v := int32(365); return &v }(),
+			},
+		},
+	}
+	if err := c.service.kubeClient.Create(ctx, cert); err != nil {
+		return fmt.Errorf("create Certificate %s: %w", name, err)
+	}
+	fmt.Printf("Auto-created Certificate %s for ProviderConfig %s\n", name, pcRef.Name)
+	return nil
+}
+
+// ensureManifest creates a Manifest CR for the Lease if missing, owned by it.
+func (c *external) ensureManifest(ctx context.Context, lease *akashv1alpha1.Lease) error {
+	pcRef := lease.GetProviderConfigReference()
+	if pcRef == nil || pcRef.Name == "" {
+		return fmt.Errorf("Lease has no providerConfigRef")
+	}
+	name := lease.Name + "-manifest"
+	existing := &akashv1alpha1.Manifest{}
+	err := c.service.kubeClient.Get(ctx, kubeclient.ObjectKey{Name: name}, existing)
+	if err == nil {
+		return nil
+	}
+	if !apierrors.IsNotFound(err) {
+		return fmt.Errorf("get Manifest %s: %w", name, err)
+	}
+
+	secretNS := lease.GetNamespace()
+	if secretNS == "" {
+		secretNS = "default"
+	}
+	truthy := true
+
+	manifest := &akashv1alpha1.Manifest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+			Labels: map[string]string{
+				"akash.overlock.network/lease":          lease.Name,
+				"akash.overlock.network/providerconfig": pcRef.Name,
+				"akash.overlock.network/managed-by":     "lease",
+			},
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion:         akashv1alpha1.SchemeGroupVersion.String(),
+				Kind:               akashv1alpha1.LeaseKind,
+				Name:               lease.Name,
+				UID:                lease.UID,
+				Controller:         &truthy,
+				BlockOwnerDeletion: &truthy,
+			}},
+		},
+		Spec: akashv1alpha1.ManifestSpec{
+			ResourceSpec: xpv1.ResourceSpec{
+				ProviderConfigReference: pcRef,
+			},
+			ForProvider: akashv1alpha1.ManifestParameters{
+				LeaseRef: akashv1alpha1.ManifestLeaseReference{
+					Name: lease.Name,
+				},
+				CertificateSecretRef: akashv1alpha1.ManifestSecretReference{
+					Name:      certSecretName(pcRef.Name),
+					Namespace: secretNS,
+				},
+			},
+		},
+	}
+	if err := c.service.kubeClient.Create(ctx, manifest); err != nil {
+		return fmt.Errorf("create Manifest %s: %w", name, err)
+	}
+	fmt.Printf("Auto-created Manifest %s for Lease %s\n", name, lease.Name)
+	return nil
 }

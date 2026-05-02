@@ -479,17 +479,17 @@ services:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			hashBytes := generateSDLHash(tt.sdl)
+			hashBytes := GenerateSDLHash(tt.sdl)
 			result := fmt.Sprintf("%x", hashBytes)
 			// Note: Expected values are computed dynamically since hash depends on normalization
 			if len(result) != 64 { // SHA256 should be 64 hex chars
-				t.Errorf("generateSDLHash() produced %d hex chars, expected 64", len(result))
+				t.Errorf("GenerateSDLHash() produced %d hex chars, expected 64", len(result))
 			}
 			// Test consistency - same input should produce same hash
-			hashBytes2 := generateSDLHash(tt.sdl)
+			hashBytes2 := GenerateSDLHash(tt.sdl)
 			result2 := fmt.Sprintf("%x", hashBytes2)
 			if result != result2 {
-				t.Errorf("generateSDLHash() not consistent: first=%s, second=%s", result, result2)
+				t.Errorf("GenerateSDLHash() not consistent: first=%s, second=%s", result, result2)
 			}
 		})
 	}

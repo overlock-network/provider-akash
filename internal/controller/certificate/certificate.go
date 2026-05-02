@@ -19,9 +19,11 @@ package certificate
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	kubeclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -179,6 +181,14 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 		return nil, errors.Wrap(err, errGetPC)
 	}
 
+	if pc.GetDeletionTimestamp() != nil && cr.GetDeletionTimestamp() == nil {
+		fmt.Printf("Certificate %s: ProviderConfig %q is being deleted, marking self for deletion\n",
+			cr.Name, pc.Name)
+		if err := c.kubeClient.Delete(ctx, cr); err != nil && !apierrors.IsNotFound(err) {
+			return nil, errors.Wrap(err, "failed to mark Certificate for deletion alongside ProviderConfig")
+		}
+	}
+
 	pcInfo := client.ProviderConfigInfo{
 		Source:              pc.Spec.Credentials.Source,
 		CredentialSelectors: pc.Spec.Credentials.CommonCredentialSelectors,
@@ -244,6 +254,10 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 			}, nil
 		}
 		return managed.ExternalObservation{}, errors.Wrap(err, errGetCertificate)
+	}
+
+	if strings.EqualFold(certInfo.State, "revoked") {
+		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 
 	// Update status with observed data
@@ -441,7 +455,11 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) (managed.Ext
 	}
 
 	if err := c.service.RevokeCertificate(ctx, serial, owner); err != nil {
-		return managed.ExternalDelete{}, errors.Wrap(err, errRevokeCertificate)
+		msg := strings.ToLower(err.Error())
+		if !strings.Contains(msg, "already revoked") && !strings.Contains(msg, "not found") {
+			return managed.ExternalDelete{}, errors.Wrap(err, errRevokeCertificate)
+		}
+		fmt.Printf("Certificate %s already revoked or gone on chain: %v\n", cr.Name, err)
 	}
 
 	return managed.ExternalDelete{}, nil
@@ -512,3 +530,4 @@ func getInt32Value(ptr *int32, defaultValue int32) int32 {
 	}
 	return defaultValue
 }
+
