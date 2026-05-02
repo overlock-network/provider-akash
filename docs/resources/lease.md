@@ -57,3 +57,4 @@ spec:
 - **Create:** Sends `MsgCreateLease` on-chain, accepting the specified bid. The provider begins scheduling the workload.
 - **Update:** Lease parameters cannot be changed after creation. The controller reconciles observed state only.
 - **Delete:** Sends `MsgCloseLease` on-chain, stopping the workload on the provider. The escrow for that group is returned to the tenant.
+- **Side effects when active:** the Lease controller auto-creates a `Certificate` (per ProviderConfig) and a `Manifest` (per Lease) once the lease is Ready. The Manifest is owned by the Lease so it is garbage-collected when the Lease is closed.

@@ -51,7 +51,7 @@ An SDL (Stack Definition Language) resource describes the workload to be deploye
 |---|---|
 | `attributes` | Map of provider attributes to require |
 | `signedBy.anyOf` | Require signature from any listed address |
-| `pricing.<service>.amount` | Max price per block in uact |
+| `pricing.<service>.amount` | Max price per block in `uact` (denom is hard-coded to `uact` under v2 BME — only the amount is configurable) |
 
 ### `deployment.<service>`
 

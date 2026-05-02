@@ -6,6 +6,16 @@
 
 Manages a TLS certificate used for mTLS communication with Akash providers. The certificate is registered on-chain and the keypair is published to a Kubernetes Secret via `writeConnectionSecretToRef`. The `Manifest` CR references this Secret to authenticate against the provider.
 
+> Normally you do **not** create this resource yourself. The Lease controller auto-creates one `Certificate` per `ProviderConfig` when the first Lease becomes Ready, and reuses it across leases. Create one manually only if you need a custom domain set or validity window.
+
+## Auto-created naming
+
+When auto-created by the Lease controller:
+- `metadata.name` is `<providerconfig-name>-cert`
+- `writeConnectionSecretToRef.name` is `<providerconfig-name>-cert-secret`
+- `writeConnectionSecretToRef.namespace` matches the parent Lease's namespace
+- The Certificate self-deletes when its `ProviderConfig` is deleted
+
 ## Spec fields (`forProvider`)
 
 | Field | Required | Default | Description |

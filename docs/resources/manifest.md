@@ -6,6 +6,8 @@
 
 Sends the workload manifest to the Akash provider over mTLS. This is the final step before a workload becomes running. The controller resolves the lease coordinates from the `Lease` CR, reads the mTLS keypair from the certificate Secret, and pushes the SDL-derived manifest to the provider's HTTP API.
 
+> Normally you do **not** create this resource yourself. The Lease controller auto-creates one `Manifest` per `Lease` once the lease is active, wired to the auto-created `Certificate`'s Secret, and owned by the Lease so Kubernetes GC removes it when the Lease is closed. Create one manually only if you need to override the default certificate Secret reference.
+
 ## Spec fields (`forProvider`)
 
 | Field | Required | Description |

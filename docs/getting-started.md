@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Kubernetes cluster with [Crossplane](https://crossplane.io) installed
-- An Akash wallet with sufficient AKT balance (minimum 0.5 AKT per deployment deposit)
+- An Akash wallet funded with [**minted ACT**](https://akash.network/docs/developers/deployment/cli/act-mint-burn/) (deposits and lease pricing) and **AKT** (transaction gas)
 - Access to an Akash RPC node (defaults to `https://rpc.akashnet.io:443`)
 
 ## Install the provider
@@ -33,15 +33,35 @@ kubectl get providers
 
 ## Configure credentials
 
-Create a Secret containing your Akash wallet key (base64-encoded mnemonic or key export):
+Export your Akash wallet to the ASCII-armored format the cosmos-sdk keyring expects:
 
 ```sh
-kubectl create secret generic akash-credentials \
-  --from-literal=credentials="$(cat ~/.akash/key-export)" \
-  --namespace crossplane-system
+akash keys export <key-name> --keyring-backend <os|test>
+# prompts for an encryption passphrase — remember it
 ```
 
-Create a `ProviderConfig` referencing the Secret:
+Create a Secret with the armored block under `privateKey` and the passphrase under `passphrase`:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: akash-credentials
+  namespace: crossplane-system
+type: Opaque
+stringData:
+  privateKey: |
+    -----BEGIN TENDERMINT PRIVATE KEY-----
+    salt: <...>
+    type: secp256k1
+    kdf: bcrypt
+
+    <armored-body>
+    -----END TENDERMINT PRIVATE KEY-----
+  passphrase: "<passphrase-used-during-export>"
+```
+
+Create a `ProviderConfig` that references both:
 
 ```yaml
 apiVersion: akash.overlock.network/v1alpha1
@@ -54,7 +74,13 @@ spec:
     secretRef:
       namespace: crossplane-system
       name: akash-credentials
-      key: credentials
+      key: privateKey
+  passphrase:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: akash-credentials
+      key: passphrase
   configuration:
     keyName: default
     keyringBackend: test
@@ -107,7 +133,7 @@ spec:
         westcoast:
           pricing:
             web:
-              amount: 100
+              amount: 100        # uact per block (denom is hard-coded to uact under v2 BME)
     deployment:
       web:
         profile: westcoast
@@ -128,8 +154,10 @@ spec:
     sdlRef:
       name: my-app
       namespace: default
-    deposit: 5000000
+    deposit: 5000000           # uact (5 ACT). Minimum 500000, denom hard-coded to uact.
 ```
+
+> Gas for the underlying `MsgCreateDeployment` is paid separately in `uakt` from the wallet referenced by the ProviderConfig.
 
 Watch the deployment reach `Bidding` phase:
 
@@ -157,45 +185,17 @@ spec:
 
 With `autoAccept: true` the controller creates a `Lease` automatically once a qualifying bid is found.
 
-### 4. Create a certificate (for mTLS)
+### 4. Lease, Certificate, and Manifest are auto-created
 
-```yaml
-apiVersion: akash.overlock.network/v1alpha1
-kind: Certificate
-metadata:
-  name: my-app-cert
-spec:
-  providerConfigRef:
-    name: default
-  writeConnectionSecretToRef:
-    name: my-app-cert-tls
-    namespace: default
-  forProvider:
-    domains:
-      - my-app.example.com
-    autoRenew: true
-    validityDays: 365
+Once the `Lease` is `Ready`, the lease controller creates a `Certificate` (per ProviderConfig) and a `Manifest` (per Lease) for you, and the manifest controller delivers the SDL to the provider over mTLS.
+
+Watch progress:
+
+```sh
+kubectl get lease,certificate,manifest
 ```
 
-### 5. Send the manifest
-
-```yaml
-apiVersion: akash.overlock.network/v1alpha1
-kind: Manifest
-metadata:
-  name: my-app
-spec:
-  providerConfigRef:
-    name: default
-  forProvider:
-    leaseRef:
-      name: my-app-<generated-by-bidpolicy>
-    certificateSecretRef:
-      name: my-app-cert-tls
-      namespace: default
-```
-
-Once the `Manifest` is `Ready`, your workload is running on Akash. Check `status.atProvider.services` for URIs.
+When the `Manifest` reports `Ready`, the workload is running. Check `status.atProvider.services` on the Manifest for service URIs.
 
 ## Next steps
 

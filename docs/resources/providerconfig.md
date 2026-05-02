@@ -10,16 +10,18 @@ Holds the Akash wallet credentials and node connection settings used by all othe
 
 ### `credentials` (required)
 
+Reference to the wallet key in ASCII-armored format produced by `akash keys export <key-name> --keyring-backend <os|test>` (the block starting with `-----BEGIN TENDERMINT PRIVATE KEY-----`).
+
 | Field | Description |
 |---|---|
 | `source` | Where to read the credential. One of `None`, `Secret`, `InjectedIdentity`, `Environment`, `Filesystem` |
 | `secretRef.namespace` | Namespace of the Secret |
 | `secretRef.name` | Name of the Secret |
-| `secretRef.key` | Key inside the Secret holding the wallet key export |
+| `secretRef.key` | Key inside the Secret holding the armored private key |
 
-### `passphrase` (optional)
+### `passphrase` (required when the key is encrypted)
 
-Same shape as `credentials`. Used when the key export is encrypted.
+Same shape as `credentials`. Holds the passphrase entered during `akash keys export`. The cosmos-sdk keyring uses this to decrypt the armored block — without it the controller cannot import the key.
 
 ### `configuration` (optional)
 
@@ -49,7 +51,13 @@ spec:
     secretRef:
       namespace: crossplane-system
       name: akash-credentials
-      key: credentials
+      key: privateKey
+  passphrase:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: akash-credentials
+      key: passphrase
 ```
 
 ## Lifecycle notes

@@ -12,7 +12,7 @@ Represents an on-chain Akash deployment. The controller submits a `MsgCreateDepl
 |---|---|---|---|
 | `sdlRef.name` | yes | — | Name of the `SDL` CR |
 | `sdlRef.namespace` | no | same namespace | Namespace of the `SDL` CR |
-| `deposit` | no | `5000000` | Escrow deposit in uact (min `500000`) |
+| `deposit` | no | `5000000` | Escrow deposit amount in `uact` (min `500000`). Denom is hard-coded to `uact` under v2 BME — only the integer amount is configurable. Gas for the broadcast is paid separately in `uakt`. |
 
 ## Status fields (`atProvider`)
 
@@ -27,7 +27,7 @@ Represents an on-chain Akash deployment. The controller submits a `MsgCreateDepl
 | `bids` | Total bids ever recorded (stays >0 after bid window) |
 | `leasesActive` | Number of active leases |
 | `createdHeight` | Block height at creation |
-| `escrowBalance` | Current escrow `{denom, amount}` |
+| `escrowBalance` | Current escrow `{denom: uact, amount}` (denom is always `uact` under v2 BME) |
 
 ### Phase values
 

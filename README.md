@@ -13,7 +13,7 @@ This Crossplane provider enables you to manage and reconcile Akash Network resou
 ### Prerequisites
 
 - [Crossplane](https://crossplane.io) installed in your Kubernetes cluster.
-- Akash CLI configured and accessible from the Kubernetes nodes.
+- An Akash wallet funded with [minted ACT](https://akash.network/docs/developers/deployment/cli/act-mint-burn/) and AKT (gas).
 
 
 ## Install
@@ -50,7 +50,7 @@ Check out the `examples/` directory for more sample configurations and usage sce
 ## Troubleshooting
 
 - **Logs**: Check the Crossplane provider logs for any errors during reconciliation.
-- **Akash CLI**: Verify the state of your deployments using the Akash CLI.
+- **Status**: Verify the state of your resources via `kubectl get/describe` — each CR's `status.atProvider` reflects the live on-chain state.
 
 
 ## License

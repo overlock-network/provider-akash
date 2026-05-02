@@ -13,7 +13,7 @@ Defines bid selection rules for one or more `Deployment` CRs. The controller wat
 | `deploymentRef.name` | one of these | — | Target a single `Deployment` CR by name |
 | `selector` | one of these | — | Label selector matching multiple `Deployment` CRs |
 | `autoAccept` | no | `false` | Automatically create a `Lease` for the selected bid |
-| `maxPrice` | no | — | Maximum acceptable price per block in uact |
+| `maxPrice` | no | — | Maximum acceptable bid price per block in `uact` (denom is `uact` under v2 BME) |
 | `minProviderScore` | no | — | Minimum provider reputation score (0–100) |
 | `requiredAttributes` | no | — | List of `{key, value}` provider attributes that must match |
 | `excludedProviders` | no | — | Provider addresses to ignore |
