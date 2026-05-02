@@ -1,0 +1,59 @@
+# ProviderConfig
+
+**API:** `akash.overlock.network/v1alpha1`
+**Kind:** `ProviderConfig`
+**Scope:** Cluster
+
+Holds the Akash wallet credentials and node connection settings used by all other resources. Every managed resource has a `providerConfigRef` that points to one of these.
+
+## Spec fields
+
+### `credentials` (required)
+
+| Field | Description |
+|---|---|
+| `source` | Where to read the credential. One of `None`, `Secret`, `InjectedIdentity`, `Environment`, `Filesystem` |
+| `secretRef.namespace` | Namespace of the Secret |
+| `secretRef.name` | Name of the Secret |
+| `secretRef.key` | Key inside the Secret holding the wallet key export |
+
+### `passphrase` (optional)
+
+Same shape as `credentials`. Used when the key export is encrypted.
+
+### `configuration` (optional)
+
+| Field | Default | Description |
+|---|---|---|
+| `keyName` | `default` | Name of the key in the keyring |
+| `keyringBackend` | `test` | Keyring backend (`os`, `file`, `test`, `memory`) |
+| `accountAddress` | — | Akash address override (auto-derived if omitted) |
+| `net` | `mainnet` | Network (`mainnet`, `testnet`, `sandbox`) |
+| `chainId` | `akashnet-2` | Chain ID |
+| `node` | `https://rpc.akashnet.io:443` | RPC endpoint |
+| `home` | `/tmp/.akash` | Akash home directory |
+| `path` | `/usr/local/bin/akash` | Path to the `akash` binary |
+| `providersApi` | `https://akash-api.polkachu.com` | Providers REST API base URL |
+| `skipTLSVerification` | `false` | Skip TLS verification (dev/test only) |
+
+## Minimal example
+
+```yaml
+apiVersion: akash.overlock.network/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: default
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: akash-credentials
+      key: credentials
+```
+
+## Lifecycle notes
+
+- `ProviderConfig` is not itself an on-chain resource; it is never created or deleted on Akash.
+- Changing `configuration` fields takes effect on the next reconciliation of any resource that references this config.
+- Deleting a `ProviderConfig` while resources still reference it will block those resources from reconciling.
