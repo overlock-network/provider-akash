@@ -102,7 +102,11 @@ dev-clean: $(OVERLOCK)
 	@$(INFO) Deleting development environment
 	@$(OVERLOCK) env delete akash --confirm
 
-.PHONY: submodules fallthrough test-integration run dev dev-clean
+# Used by the reusable publish workflow's actions/cache step.
+go.mod.cachedir:
+	@go env GOMODCACHE
+
+.PHONY: submodules fallthrough test-integration run dev dev-clean go.mod.cachedir
 
 # ====================================================================================
 # Special Targets
