@@ -5,10 +5,19 @@ metadata:
   namespace: crossplane-system
 type: Opaque
 stringData:
-  # Your Akash wallet private key (hex-encoded).
-  # Export from an existing key:
-  #   akash keys export <key-name> --keyring-backend os --unarmored-hex --unsafe
-  privateKey: "<your-wallet-private-key-hex-here>"
+  # ASCII-armored private key, exported with:
+  #   akash keys export <key-name> --keyring-backend os
+  # The export command prompts for an encryption passphrase — store the
+  # same value below in `passphrase`.
+  privateKey: |
+    -----BEGIN TENDERMINT PRIVATE KEY-----
+    salt: <...>
+    type: secp256k1
+    kdf: bcrypt
+
+    <armored-body>
+    -----END TENDERMINT PRIVATE KEY-----
+  passphrase: "<passphrase-used-during-export>"
 
 ---
 
@@ -23,6 +32,12 @@ spec:
       namespace: crossplane-system
       name: akash-wallet-secret
       key: privateKey
+  passphrase:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: akash-wallet-secret
+      key: passphrase
   configuration:
     keyName: "default"
     keyringBackend: "os"

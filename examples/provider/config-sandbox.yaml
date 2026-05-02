@@ -5,11 +5,20 @@ metadata:
   namespace: crossplane-system
 type: Opaque
 stringData:
-  # Your Akash sandbox wallet private key (hex-encoded).
-  # Export from an existing key:
-  #   akash keys export sandbox-key --keyring-backend test --unarmored-hex --unsafe
-  # Then fund it from the sandbox faucet: https://faucet.sandbox-01.aksh.pw/
-  privateKey: "<your-sandbox-wallet-private-key-hex-here>"
+  # ASCII-armored private key, exported with:
+  #   akash keys export sandbox-key --keyring-backend test
+  # The export command prompts for an encryption passphrase — store the
+  # same value below in `passphrase`.
+  # Fund the sandbox wallet from: https://faucet.sandbox-01.aksh.pw/
+  privateKey: |
+    -----BEGIN TENDERMINT PRIVATE KEY-----
+    salt: <...>
+    type: secp256k1
+    kdf: bcrypt
+
+    <armored-body>
+    -----END TENDERMINT PRIVATE KEY-----
+  passphrase: "<passphrase-used-during-export>"
 
 ---
 
@@ -24,6 +33,12 @@ spec:
       namespace: crossplane-system
       name: akash-sandbox-wallet-secret
       key: privateKey
+  passphrase:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: akash-sandbox-wallet-secret
+      key: passphrase
   configuration:
     keyName: "sandbox-key"
     keyringBackend: "test"

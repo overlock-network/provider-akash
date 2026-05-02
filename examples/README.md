@@ -19,7 +19,9 @@ kubectl apply -f examples/provider/config.yaml
 kubectl apply -f examples/provider/config-sandbox.yaml
 ```
 
-Edit the Secret's `credentials` field with your wallet mnemonic before applying.
+Export your wallet with `akash keys export <key-name> --keyring-backend <os|test>`, paste the
+ASCII-armored block into `privateKey`, and put the export passphrase into `passphrase` before
+applying. Both are referenced separately by the ProviderConfig.
 
 ### 2. SDL
 
