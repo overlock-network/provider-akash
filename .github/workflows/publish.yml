@@ -1,0 +1,20 @@
+name: Publish Provider Package
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish-provider-package:
+    uses: crossplane-contrib/provider-workflows/.github/workflows/publish-provider.yml@main
+    with:
+      cleanup-disk: true
+      go-version: '1.25'
+      repository: provider-akash
+      version: ${{ github.ref_name }}
+      registry_org: overlock-network
+    secrets:
+      GHCR_PAT: ${{ secrets.GITHUB_TOKEN }}
+      XPKG_MIRROR_ACCESS_ID: ${{ secrets.XPKG_ACCESS_ID }}
+      XPKG_MIRROR_TOKEN: ${{ secrets.XPKG_TOKEN }}
