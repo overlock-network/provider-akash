@@ -1,14 +1,15 @@
 apiVersion: v1
 kind: Secret
 metadata:
-  name: akash-wallet-secret
+  name: akash-sandbox-wallet-secret
   namespace: crossplane-system
 type: Opaque
 stringData:
   # ASCII-armored private key, exported with:
-  #   akash keys export <key-name> --keyring-backend os
+  #   akash keys export sandbox-key --keyring-backend test
   # The export command prompts for an encryption passphrase — store the
   # same value below in `passphrase`.
+  # Fund the sandbox wallet from: https://faucet.sandbox-01.aksh.pw/
   privateKey: |
     -----BEGIN TENDERMINT PRIVATE KEY-----
     salt: <...>
@@ -24,24 +25,24 @@ stringData:
 apiVersion: akash.overlock.network/v1alpha1
 kind: ProviderConfig
 metadata:
-  name: default
+  name: sandbox
 spec:
   credentials:
     source: Secret
     secretRef:
       namespace: crossplane-system
-      name: akash-wallet-secret
+      name: akash-sandbox-wallet-secret
       key: privateKey
   passphrase:
     source: Secret
     secretRef:
       namespace: crossplane-system
-      name: akash-wallet-secret
+      name: akash-sandbox-wallet-secret
       key: passphrase
   configuration:
-    keyName: "default"
-    keyringBackend: "os"
-    net: "mainnet"
-    chainId: "akashnet-2"
-    node: "https://rpc.akashnet.io:443"
-    providersApi: "https://akash-api.polkachu.com"
+    keyName: "sandbox-key"
+    keyringBackend: "test"
+    net: "sandbox"
+    chainId: "sandbox-01"
+    node: "https://rpc.sandbox-01.aksh.pw:443"
+    providersApi: "https://api.sandbox-01.aksh.pw"

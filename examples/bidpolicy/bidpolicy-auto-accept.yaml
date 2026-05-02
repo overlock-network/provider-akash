@@ -1,0 +1,15 @@
+apiVersion: akash.overlock.network/v1alpha1
+kind: BidPolicy
+metadata:
+  name: auto-accept
+spec:
+  providerConfigRef:
+    name: default
+  forProvider:
+    # Reference a specific Deployment by name instead of a label selector
+    deploymentRef:
+      name: nginx-deployment
+    selectionStrategy: lowest-price
+    # Automatically create a Lease for the winning bid without manual approval
+    autoAccept: true
+    maxBids: 10

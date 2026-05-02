@@ -1,14 +1,18 @@
 apiVersion: akash.overlock.network/v1alpha1
 kind: BidPolicy
 metadata:
-  name: lowest-price
+  name: price-cap
 spec:
   providerConfigRef:
     name: default
   forProvider:
-    # Match all Deployments labelled app=simple-web
     selector:
       matchLabels:
         app: simple-web
     selectionStrategy: lowest-price
+    # Reject any bid above this price per block in uAKT
+    maxPrice: 200
+    # Exclude specific providers by their Akash address
+    excludedProviders:
+      - "akash1exampleprovideraddresstoexclude000000"
     maxBids: 10

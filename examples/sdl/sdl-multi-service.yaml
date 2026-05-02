@@ -1,0 +1,62 @@
+apiVersion: akash.overlock.network/v1alpha1
+kind: SDL
+metadata:
+  name: multi-service-app
+  namespace: default
+spec:
+  providerConfigRef:
+    name: default
+  forProvider:
+    version: "2.0"
+    services:
+      frontend:
+        image: nginx:1.25
+        expose:
+          - port: 80
+            as: 80
+            to:
+              - global: true
+          - port: 80
+            as: 8080
+            to:
+              - service: backend
+      backend:
+        image: node:20-alpine
+        command:
+          - sh
+          - -c
+        args:
+          - "node -e \"const h=require('http');h.createServer((_,r)=>{r.end('OK')}).listen(3000)\""
+        expose:
+          - port: 3000
+            as: 3000
+            to:
+              - service: frontend
+    profiles:
+      compute:
+        frontend:
+          resources:
+            cpu: "0.5"
+            memory: "256Mi"
+            storage:
+              - size: "512Mi"
+        backend:
+          resources:
+            cpu: "1"
+            memory: "512Mi"
+            storage:
+              - size: "1Gi"
+      placement:
+        global:
+          pricing:
+            frontend:
+              amount: 50
+            backend:
+              amount: 100
+    deployment:
+      frontend:
+        profile: global
+        count: 1
+      backend:
+        profile: global
+        count: 1
