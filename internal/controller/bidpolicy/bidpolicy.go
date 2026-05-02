@@ -237,6 +237,10 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 
 	fmt.Printf("Observing BidPolicy: %s\n", cr.Name)
 
+	if cr.GetDeletionTimestamp() != nil {
+		return managed.ExternalObservation{ResourceExists: false}, nil
+	}
+
 	// Validate policy configuration
 	if err := c.service.ValidatePolicy(ctx, cr); err != nil {
 		c.setFailedState(cr, fmt.Sprintf("Invalid policy configuration: %v", err))
@@ -379,31 +383,13 @@ func (c *external) Disconnect(ctx context.Context) error {
 	return nil
 }
 
-// Delete cleans up BidPolicy resources
+// Delete is a no-op; BidPolicy has no external resource on chain.
 func (c *external) Delete(ctx context.Context, mg resource.Managed) (managed.ExternalDelete, error) {
 	cr, ok := mg.(*akashv1alpha1.BidPolicy)
 	if !ok {
 		return managed.ExternalDelete{}, errors.New(errNotBidPolicy)
 	}
-
 	fmt.Printf("Deleting BidPolicy: %s\n", cr.Name)
-
-	// Clean up any ActiveBid resources created by this policy
-	for _, activeBidRef := range cr.Status.AtProvider.ActiveBidsManaged {
-		activeBid := &akashv1alpha1.ActiveBid{}
-		err := c.service.kubeClient.Get(ctx, types.NamespacedName{
-			Name:      activeBidRef.Name,
-			Namespace: activeBidRef.Namespace,
-		}, activeBid)
-		if err == nil {
-			// Delete the ActiveBid
-			err = c.service.kubeClient.Delete(ctx, activeBid)
-			if err != nil {
-				fmt.Printf("Warning: Failed to delete ActiveBid %s: %v\n", activeBidRef.Name, err)
-			}
-		}
-	}
-
 	return managed.ExternalDelete{}, nil
 }
 
@@ -627,6 +613,22 @@ func (c *external) processBidSelections(ctx context.Context, cr *akashv1alpha1.B
 	}
 	if cr.Status.AtProvider.CreatedLeases == nil {
 		cr.Status.AtProvider.CreatedLeases = make(map[string]akashv1alpha1.LeaseReference)
+	}
+
+	for depName, leaseRef := range cr.Status.AtProvider.CreatedLeases {
+		lease := &akashv1alpha1.Lease{}
+		err := c.service.kubeClient.Get(ctx, kubeclient.ObjectKey{Name: leaseRef.Name, Namespace: leaseRef.Namespace}, lease)
+		if apierrors.IsNotFound(err) {
+			delete(cr.Status.AtProvider.CreatedLeases, depName)
+			delete(cr.Status.AtProvider.SelectedBids, depName)
+			delete(cr.Status.AtProvider.SelectionReasons, depName)
+		}
+	}
+	for depName := range cr.Status.AtProvider.SelectedBids {
+		if _, hasLease := cr.Status.AtProvider.CreatedLeases[depName]; !hasLease {
+			delete(cr.Status.AtProvider.SelectedBids, depName)
+			delete(cr.Status.AtProvider.SelectionReasons, depName)
+		}
 	}
 
 	// Group eligible bids by deployment

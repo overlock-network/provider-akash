@@ -26,6 +26,7 @@ import (
 	"github.com/overlock-network/provider-akash/internal/controller/config"
 	"github.com/overlock-network/provider-akash/internal/controller/deployment"
 	"github.com/overlock-network/provider-akash/internal/controller/lease"
+	"github.com/overlock-network/provider-akash/internal/controller/manifest"
 	"github.com/overlock-network/provider-akash/internal/controller/sdl"
 )
 
@@ -40,6 +41,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		bidpolicy.Setup,
 		lease.Setup,
 		certificate.Setup,
+		manifest.Setup,
 	} {
 		if err := setup(mgr, o); err != nil {
 			return err

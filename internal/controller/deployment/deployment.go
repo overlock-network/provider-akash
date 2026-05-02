@@ -18,13 +18,11 @@ package deployment
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
-	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -646,14 +644,9 @@ func setReadyCondition(cr *v1alpha1.Deployment, state string) {
 	}
 }
 
-// generateSDLHashHex creates a consistent hex hash from SDL content
+// generateSDLHashHex returns the chain-stored SDL hash as hex.
 func generateSDLHashHex(sdl string) string {
-	// Normalize SDL content by removing extra whitespace and ensuring consistent formatting
-	normalizedSDL := strings.TrimSpace(sdl)
-
-	// Create SHA256 hash of the normalized SDL content
-	hash := sha256.Sum256([]byte(normalizedSDL))
-	return fmt.Sprintf("%x", hash[:])
+	return fmt.Sprintf("%x", client.GenerateSDLHash(sdl))
 }
 
 // resolveSDLContent resolves SDL content from SDLRef
@@ -680,12 +673,6 @@ func (c *external) resolveSDLContent(ctx context.Context, cr *v1alpha1.Deploymen
 			sdlNamespace, sdlRef.Name, sdlResource.Status.AtProvider.ValidationErrors)
 	}
 
-	// Convert SDL spec to YAML - now compatible with internal types
-	sdlYAML, err := yaml.Marshal(sdlResource.Spec.ForProvider)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to marshal SDL to YAML")
-	}
-
-	return string(sdlYAML), nil
+	return client.RenderSDLToYAML(sdlResource)
 }
 

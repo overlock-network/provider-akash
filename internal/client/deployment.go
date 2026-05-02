@@ -133,7 +133,7 @@ func (ak *AkashClient) CreateDeployment(ctx context.Context, req clienttypes.Dep
 			DSeq:  dseq,
 		},
 		Groups: groups,
-		Hash:   generateSDLHash(req.SDL),
+		Hash:   GenerateSDLHash(req.SDL),
 		Deposit: depositv1.Deposit{
 			Amount:  depositCoin,
 			Sources: depositv1.Sources{depositv1.SourceBalance},
@@ -171,13 +171,15 @@ func min(a, b int) int {
 	return b
 }
 
-// generateSDLHash creates a consistent hash from SDL content
-func generateSDLHash(sdl string) []byte {
-	// Normalize SDL content by removing extra whitespace and ensuring consistent formatting
-	normalizedSDL := strings.TrimSpace(sdl)
-
-	// Create SHA256 hash of the normalized SDL content
-	hash := sha256.Sum256([]byte(normalizedSDL))
+// GenerateSDLHash returns manifest.Version() bytes for the given SDL.
+func GenerateSDLHash(sdl string) []byte {
+	mani, err := convertSDLToManifest(sdl)
+	if err == nil {
+		if v, vErr := mani.Version(); vErr == nil {
+			return v
+		}
+	}
+	hash := sha256.Sum256([]byte(strings.TrimSpace(sdl)))
 	return hash[:]
 }
 
@@ -302,9 +304,8 @@ func convertSDLToGroupSpecs(sdl *clienttypes.SDL) ([]deploymenttypes.GroupSpec, 
 
 		priceCoin := sdktypes.NewInt64DecCoin(DepositDenom, pricing.Amount)
 
-		// Create GroupSpec
 		groupSpec := deploymenttypes.GroupSpec{
-			Name:         groupName,
+			Name:         deployGroup.Profile,
 			Requirements: *placementRequirements,
 			Resources: deploymenttypes.ResourceUnits{
 				{
@@ -498,26 +499,38 @@ func convertSDLPlacementToAkash(placement clienttypes.SDLPlacementProfile) (*aty
 	return requirements, nil
 }
 
-// convertSDLExposeToEndpoints converts SDL expose specifications to Akash endpoints
+// convertSDLExposeToEndpoints converts SDL expose specs into chain Endpoints.
 func convertSDLExposeToEndpoints(exposeSpecs []clienttypes.SDLExposeSpec) (rtypes.Endpoints, error) {
 	var endpoints rtypes.Endpoints
 
 	for _, spec := range exposeSpecs {
-		endpoint := rtypes.Endpoint{
-			SequenceNumber: uint32(spec.Port),
-			Kind:           rtypes.Endpoint_RANDOM_PORT, // Use RANDOM_PORT to ensure kind is included
-		}
-
-		// Determine endpoint kind based on the 'to' field
+		global := false
 		for _, to := range spec.To {
 			if to.Global {
-				// For global endpoints, use RANDOM_PORT which has value 1
-				endpoint.Kind = rtypes.Endpoint_RANDOM_PORT
+				global = true
 				break
 			}
 		}
-
-		endpoints = append(endpoints, endpoint)
+		if !global {
+			continue
+		}
+		external := spec.As
+		if external == 0 {
+			external = spec.Port
+		}
+		proto := strings.ToLower(spec.Proto)
+		if proto == "" {
+			proto = "tcp"
+		}
+		isIngress := proto == "tcp" && external == 80
+		kind := rtypes.Endpoint_RANDOM_PORT
+		if isIngress {
+			kind = rtypes.Endpoint_SHARED_HTTP
+		}
+		endpoints = append(endpoints, rtypes.Endpoint{
+			SequenceNumber: uint32(spec.Port),
+			Kind:           kind,
+		})
 	}
 
 	return endpoints, nil
@@ -671,7 +684,7 @@ func (ak *AkashClient) UpdateDeployment(ctx context.Context, dseq string, sdl st
 			DSeq:  dseqUint,
 			Owner: ak.Config.AccountAddress,
 		},
-		Hash: generateSDLHash(sdl),
+		Hash: GenerateSDLHash(sdl),
 	}
 
 	txClient := client.Tx()

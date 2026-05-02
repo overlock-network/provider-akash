@@ -129,6 +129,7 @@ type BidPolicyObservation struct {
 // ActiveBidReference contains a reference to an ActiveBid resource
 type ActiveBidReference struct {
 	// Name is the name of the ActiveBid resource
+	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 
 	// Namespace is the namespace of the ActiveBid resource
@@ -150,6 +151,7 @@ type ActiveBidReference struct {
 // LeaseReference contains a reference to a Lease resource
 type LeaseReference struct {
 	// Name is the name of the Lease resource
+	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 
 	// Namespace is the namespace of the Lease resource
