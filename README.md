@@ -1,4 +1,4 @@
-# Crossplane Akash Provider
+# Crossplane Akash Network Provider
 
 This Crossplane provider enables you to manage and reconcile Akash Network resources, such as deployments, directly from your Kubernetes cluster using Crossplane.
 
