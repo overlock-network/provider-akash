@@ -249,4 +249,16 @@ jobs:
 
       - name: Publish Artifacts
         if: github.event_name != 'pull_request' && env.UPBOUND_MARKETPLACE_PUSH_ROBOT_USR != ''
-        run: make publish BRANCH_NAME=${GITHUB_REF##*/}
+        run: |
+          # The build's publish.artifacts target only fires for
+          # BRANCH_NAME in {main, master, release-*}. On tag pushes
+          # GITHUB_REF##*/ resolves to the tag (e.g. v0.0.1), which
+          # would skip publish entirely; force BRANCH_NAME=main so
+          # the gate passes. VERSION is still derived from git
+          # describe, so the pushed package is tagged with the real
+          # version (e.g. :v0.0.1), not :main.
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            make publish BRANCH_NAME=main
+          else
+            make publish BRANCH_NAME=${GITHUB_REF##*/}
+          fi
