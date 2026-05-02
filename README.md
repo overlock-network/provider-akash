@@ -1,4 +1,4 @@
-# Crossplane Akash Provider
+# Crossplane Akash Network Provider
 
 This Crossplane provider enables you to manage and reconcile Akash Network resources, such as deployments, directly from your Kubernetes cluster using Crossplane.
 
@@ -13,7 +13,7 @@ This Crossplane provider enables you to manage and reconcile Akash Network resou
 ### Prerequisites
 
 - [Crossplane](https://crossplane.io) installed in your Kubernetes cluster.
-- Akash CLI configured and accessible from the Kubernetes nodes.
+- An Akash wallet funded with [minted ACT](https://akash.network/docs/developers/deployment/cli/act-mint-burn/) and AKT (gas).
 
 
 ## Install
@@ -21,7 +21,7 @@ This Crossplane provider enables you to manage and reconcile Akash Network resou
 To install the Akash provider without modifications, use the Crossplane CLI in a Kubernetes cluster where Crossplane is installed:
 
 ```console
-crossplane xpkg install provider xpkg.upbound.io/web7/provider-akash:v0.1.0
+crossplane xpkg install provider xpkg.upbound.io/overlock-network/provider-akash:v0.1.0
 ```
 
 You can also manually install the Akash provider by creating a Provider directly:
@@ -32,7 +32,7 @@ kind: Provider
 metadata:
   name: provider-akash
 spec:
-  package: xpkg.upbound.io/web7/provider-akash:v0.1.0
+  package: xpkg.upbound.io/overlock-network/provider-akash:v0.1.0
 ```
 
 ## Usage
@@ -50,7 +50,7 @@ Check out the `examples/` directory for more sample configurations and usage sce
 ## Troubleshooting
 
 - **Logs**: Check the Crossplane provider logs for any errors during reconciliation.
-- **Akash CLI**: Verify the state of your deployments using the Akash CLI.
+- **Status**: Verify the state of your resources via `kubectl get/describe` — each CR's `status.atProvider` reflects the live on-chain state.
 
 
 ## License
