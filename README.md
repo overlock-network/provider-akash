@@ -22,7 +22,7 @@ This Crossplane provider enables you to manage and reconcile Akash Network resou
 To install the Akash provider without modifications, use the Crossplane CLI in a Kubernetes cluster where Crossplane is installed:
 
 ```console
-crossplane xpkg install provider xpkg.upbound.io/overlock-network/provider-akash:v0.1.0
+crossplane xpkg install provider xpkg.upbound.io/overlock-network/provider-akash:v0.0.9
 ```
 
 You can also manually install the Akash provider by creating a Provider directly:
@@ -33,7 +33,7 @@ kind: Provider
 metadata:
   name: provider-akash
 spec:
-  package: xpkg.upbound.io/overlock-network/provider-akash:v0.1.0
+  package: xpkg.upbound.io/overlock-network/provider-akash:v0.0.9
 ```
 
 ## Usage
