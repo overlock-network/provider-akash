@@ -2,7 +2,6 @@ apiVersion: akash.overlock.network/v1alpha1
 kind: SDL
 metadata:
   name: multi-service-app
-  namespace: default
 spec:
   providerConfigRef:
     name: default

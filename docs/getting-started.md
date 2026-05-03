@@ -11,7 +11,7 @@
 Using the Crossplane CLI:
 
 ```sh
-crossplane xpkg install provider xpkg.upbound.io/overlock-network/provider-akash:v0.1.0
+crossplane xpkg install provider xpkg.upbound.io/overlock-network/provider-akash:v0.0.9
 ```
 
 Or via a `Provider` manifest:
@@ -22,7 +22,7 @@ kind: Provider
 metadata:
   name: provider-akash
 spec:
-  package: xpkg.upbound.io/overlock-network/provider-akash:v0.1.0
+  package: xpkg.upbound.io/overlock-network/provider-akash:v0.0.9
 ```
 
 Wait for the provider to become healthy:

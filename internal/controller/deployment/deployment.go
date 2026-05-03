@@ -651,26 +651,16 @@ func generateSDLHashHex(sdl string) string {
 
 // resolveSDLContent resolves SDL content from SDLRef
 func (c *external) resolveSDLContent(ctx context.Context, cr *v1alpha1.Deployment) (string, error) {
-	// Resolve SDL from SDLRef
 	sdlRef := cr.Spec.ForProvider.SDLRef
-	sdlNamespace := sdlRef.Namespace
-	if sdlNamespace == "" {
-		sdlNamespace = cr.Namespace
-	}
 
-	// Get the SDL resource
 	sdlResource := &v1alpha1.SDL{}
-	if err := c.kube.Get(ctx, types.NamespacedName{
-		Name:      sdlRef.Name,
-		Namespace: sdlNamespace,
-	}, sdlResource); err != nil {
-		return "", errors.Wrapf(err, "failed to get SDL resource %s/%s", sdlNamespace, sdlRef.Name)
+	if err := c.kube.Get(ctx, types.NamespacedName{Name: sdlRef.Name}, sdlResource); err != nil {
+		return "", errors.Wrapf(err, "failed to get SDL resource %s", sdlRef.Name)
 	}
 
-	// Check if SDL is ready/validated
 	if !sdlResource.Status.AtProvider.Validated || len(sdlResource.Status.AtProvider.ValidationErrors) > 0 {
-		return "", errors.Errorf("SDL resource %s/%s is not validated or has validation errors: %v", 
-			sdlNamespace, sdlRef.Name, sdlResource.Status.AtProvider.ValidationErrors)
+		return "", errors.Errorf("SDL resource %s is not validated or has validation errors: %v",
+			sdlRef.Name, sdlResource.Status.AtProvider.ValidationErrors)
 	}
 
 	return client.RenderSDLToYAML(sdlResource)

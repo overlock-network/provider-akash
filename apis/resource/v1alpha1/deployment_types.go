@@ -51,10 +51,6 @@ type SDLReference struct {
 	// Name is the name of the SDL resource
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
-
-	// Namespace is the namespace of the SDL resource (defaults to same namespace as Deployment)
-	// +optional
-	Namespace string `json:"namespace,omitempty"`
 }
 
 

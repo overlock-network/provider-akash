@@ -332,7 +332,7 @@ type SDLStatus struct {
 // +kubebuilder:printcolumn:name="VERSION",type="string",JSONPath=".spec.forProvider.version"
 // +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Namespaced,categories={crossplane,managed,akash}
+// +kubebuilder:resource:scope=Cluster,categories={crossplane,managed,akash}
 type SDL struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

@@ -11,7 +11,6 @@ spec:
     # Reference the SDL CR that defines the workload
     sdlRef:
       name: simple-web
-      namespace: default
     # Deployment escrow deposit in uact (minimum 500000, default 5000000)
     deposit: 5000000
   # The controller will write connection details (host, ports) into this Secret

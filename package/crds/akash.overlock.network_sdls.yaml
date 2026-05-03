@@ -16,7 +16,7 @@ spec:
     listKind: SDLList
     plural: sdls
     singular: sdl
-  scope: Namespaced
+  scope: Cluster
   versions:
   - additionalPrinterColumns:
     - jsonPath: .status.conditions[?(@.type=='Ready')].status
