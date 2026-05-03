@@ -2,7 +2,6 @@ apiVersion: akash.overlock.network/v1alpha1
 kind: SDL
 metadata:
   name: postgres-persistent
-  namespace: default
 spec:
   providerConfigRef:
     name: default

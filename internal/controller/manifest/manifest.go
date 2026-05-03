@@ -506,17 +506,9 @@ func (c *external) getReferencedDeployment(ctx context.Context, lease *akashv1al
 func (c *external) getSDLContentFromDeployment(ctx context.Context, deployment *resourcev1alpha1.Deployment) (string, error) {
 	sdlRef := deployment.Spec.ForProvider.SDLRef
 
-	namespace := sdlRef.Namespace
-	if namespace == "" {
-		namespace = deployment.Namespace
-	}
-
 	sdl := &resourcev1alpha1.SDL{}
-	if err := c.kubeClient.Get(ctx, types.NamespacedName{
-		Name:      sdlRef.Name,
-		Namespace: namespace,
-	}, sdl); err != nil {
-		return "", fmt.Errorf("failed to get SDL %s/%s: %w", namespace, sdlRef.Name, err)
+	if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: sdlRef.Name}, sdl); err != nil {
+		return "", fmt.Errorf("failed to get SDL %s: %w", sdlRef.Name, err)
 	}
 
 	sdlYAML, err := c.convertSDLToYAML(sdl)

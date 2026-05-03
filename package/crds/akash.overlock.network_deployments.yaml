@@ -105,10 +105,6 @@ spec:
                       name:
                         description: Name is the name of the SDL resource
                         type: string
-                      namespace:
-                        description: Namespace is the namespace of the SDL resource
-                          (defaults to same namespace as Deployment)
-                        type: string
                     required:
                     - name
                     type: object
