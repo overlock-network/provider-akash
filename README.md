@@ -1,5 +1,5 @@
 # Crossplane Akash Network Provider
-![Akash Crossplane Logo](assets/akash-crossplane.png)
+<p align="center"><img src="assets/akash-crossplane.png" alt="Akash Crossplane Logo" width="50%"></p>
 
 This Crossplane provider enables you to manage and reconcile Akash Network resources, such as deployments, directly from your Kubernetes cluster using Crossplane.
 

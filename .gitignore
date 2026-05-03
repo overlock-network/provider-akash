@@ -10,3 +10,7 @@ cover.out
 .claude
 CLAUDE.md
 cmd/provider/provider
+.secrets
+.actrc
+.github/act-*.json
+.github/workflows/_act-*.yml
