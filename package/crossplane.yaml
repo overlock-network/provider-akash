@@ -19,9 +19,4 @@ metadata:
       manifest to providers over mTLS. Deposits and lease pricing use
       ACT (uact); gas is paid in AKT (uakt) under the v2 BME economy.
       See the project README and `docs/` for setup.
-spec:
-  controller:
-    permissionRequests:
-      - apiGroups: ["akash.overlock.network"]
-        resources: ["certificates"]
-        verbs: ["delete"]
+spec: {}
