@@ -8,6 +8,10 @@ metadata:
 spec:
   group: akash.overlock.network
   names:
+    categories:
+    - crossplane
+    - provider
+    - akash
     kind: ProviderConfig
     listKind: ProviderConfigList
     plural: providerconfigs
