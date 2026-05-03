@@ -106,7 +106,33 @@ dev-clean: $(OVERLOCK)
 go.mod.cachedir:
 	@go env GOMODCACHE
 
-.PHONY: submodules fallthrough test-integration run dev dev-clean go.mod.cachedir
+# ====================================================================================
+# Marketplace Extensions
+#
+# Upbound Marketplace renders icon and readme from a tarball appended to the
+# published xpkg via `up alpha xpkg append`. Sources are kept single-rooted in
+# the repo (assets/icon.svg, docs/marketplace.md); the extensions tree is
+# assembled at build time under $(OUTPUT_DIR)/extensions and never committed.
+
+EXTENSIONS_DIR ?= $(OUTPUT_DIR)/extensions
+EXTENSIONS_ICON ?= assets/icon.svg
+EXTENSIONS_README ?= docs/marketplace.md
+EXTENSIONS_IMAGE ?= xpkg.upbound.io/overlock-network/$(PROJECT_NAME):$(VERSION)
+
+package.extensions:
+	@$(INFO) assembling marketplace extensions tree at $(EXTENSIONS_DIR)
+	@rm -rf $(EXTENSIONS_DIR)
+	@mkdir -p $(EXTENSIONS_DIR)/icons $(EXTENSIONS_DIR)/readme
+	@cp $(EXTENSIONS_ICON) $(EXTENSIONS_DIR)/icons/icon.svg
+	@cp $(EXTENSIONS_README) $(EXTENSIONS_DIR)/readme/readme.md
+	@$(OK) marketplace extensions assembled
+
+publish.extensions: package.extensions
+	@$(INFO) appending marketplace extensions to $(EXTENSIONS_IMAGE)
+	@up alpha xpkg append --extensions-root=$(EXTENSIONS_DIR) $(EXTENSIONS_IMAGE)
+	@$(OK) marketplace extensions appended
+
+.PHONY: submodules fallthrough test-integration run dev dev-clean go.mod.cachedir package.extensions publish.extensions
 
 # ====================================================================================
 # Special Targets
