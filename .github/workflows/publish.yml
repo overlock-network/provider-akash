@@ -41,7 +41,4 @@ jobs:
           username: ${{ secrets.XPKG_ACCESS_ID }}
           password: ${{ secrets.XPKG_TOKEN }}
       - name: Append marketplace extensions
-        run: |
-          up alpha xpkg append \
-            --extensions-root=./extensions \
-            xpkg.upbound.io/overlock-network/provider-akash:${{ github.ref_name }}
+        run: make publish.extensions VERSION=${{ github.ref_name }}
