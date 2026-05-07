@@ -117,7 +117,8 @@ go.mod.cachedir:
 EXTENSIONS_DIR ?= _output/extensions
 EXTENSIONS_ICON ?= assets/icon.svg
 EXTENSIONS_README ?= docs/marketplace.md
-EXTENSIONS_IMAGE ?= xpkg.upbound.io/overlock-network/$(PROJECT_NAME):$(VERSION)
+EXTENSIONS_SOURCE ?= ghcr.io/overlock-network/$(PROJECT_NAME):$(VERSION)
+EXTENSIONS_DESTINATION ?= xpkg.upbound.io/overlock-network/$(PROJECT_NAME):$(VERSION)
 
 package.extensions:
 	@echo "Assembling marketplace extensions tree at $(EXTENSIONS_DIR)"
@@ -127,8 +128,8 @@ package.extensions:
 	@cp $(EXTENSIONS_README) $(EXTENSIONS_DIR)/readme/readme.md
 
 publish.extensions: package.extensions
-	@echo "Appending marketplace extensions to $(EXTENSIONS_IMAGE)"
-	@up alpha xpkg append --extensions-root=$(EXTENSIONS_DIR) $(EXTENSIONS_IMAGE)
+	@echo "Appending marketplace extensions from $(EXTENSIONS_SOURCE) to $(EXTENSIONS_DESTINATION)"
+	@up alpha xpkg append --extensions-root=$(EXTENSIONS_DIR) --destination=$(EXTENSIONS_DESTINATION) $(EXTENSIONS_SOURCE)
 
 .PHONY: submodules fallthrough test-integration run dev dev-clean go.mod.cachedir package.extensions publish.extensions
 
