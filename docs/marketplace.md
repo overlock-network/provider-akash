@@ -13,7 +13,7 @@ Manage [Akash Network](https://akash.network) resources declaratively from Kuber
 ## Install
 
 ```bash
-crossplane xpkg install provider xpkg.upbound.io/overlock-network/provider-akash:v0.0.15
+crossplane xpkg install provider xpkg.upbound.io/overlock-network/provider-akash:v0.0.17
 ```
 
 Or as a manifest:
@@ -24,7 +24,7 @@ kind: Provider
 metadata:
   name: provider-akash
 spec:
-  package: xpkg.upbound.io/overlock-network/provider-akash:v0.0.15
+  package: xpkg.upbound.io/overlock-network/provider-akash:v0.0.17
 ```
 
 ## Prerequisites
